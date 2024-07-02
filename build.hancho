@@ -1,0 +1,12 @@
+import hancho
+
+hancho.Task(
+  command = [
+    "mkdir -p build",
+    "gcc {opt} -g -MMD -c ViewController.cpp -o build/ViewController.o",
+    "gcc {opt} -g -MMD -c ZoomyTrace.cpp -o build/ZoomyTrace.o",
+    "gcc {opt} -g -MMD build/ViewController.o build/ZoomyTrace.o -o build/ZoomyTrace -lm -lSDL2",
+  ],
+  opt = "-O3",
+  #opt = "-O0",
+)

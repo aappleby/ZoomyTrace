@@ -4,12 +4,13 @@
 #include <memory.h>
 #include <time.h>
 #include <assert.h>
+#include <math.h>
 
 #ifdef _MSC_VER
 #  include <intrin.h>
 #  define __builtin_popcount __popcnt
 #else
-#  include <builtin.h>
+//#  include <builtin.h>
 #endif
 
 #include "ViewController.hpp"
@@ -37,79 +38,154 @@ uint32_t rng() {
 
 //------------------------------------------------------------------------------
 
-//const int64_t sample_count = 4ll * 1024ll * 1024ll * 1024ll;
-const int64_t sample_count = 16 * 1024 * 1024;
+const int64_t sample_count = 4ll * 1024ll * 1024ll * 1024ll;
+//const int64_t sample_count = 16 * 1024 * 1024;
 
-uint32_t line_bits[sample_count / 32];
-//uint32_t line_d0[sample_count];
-//uint32_t line_d1[sample_count / 256];
-//uint32_t line_d2[sample_count / 65536];
-//uint32_t line_d3[sample_count / 16777216];
+struct bitvec {
+  int64_t len;
+  uint32_t bits  [sample_count / 32];
+  uint32_t count1[sample_count / 256];
+  uint32_t count2[sample_count / 65536];
+  uint32_t count3[sample_count / 16777216];
+};
 
+bitvec line;
 
 //----------
+// Crappy cubic sin(2*pi*x) approximation
+
+double fsin(double x) {
+  double y = abs(x - floor(x - 0.25) - 0.75) - 0.25;
+  return y*(6.1922647442358311664092063140774168 - 35.3637069400432002923807340734237452*y*y);
+}
 
 void count_init() {
-  //memset(line_d0, 0, sizeof(line_d0));
-  memset(line_bits, 0, sizeof(line_bits));
+  memset(&line, 0, sizeof(line));
 
   printf("generating pattern\n");
+  auto time_a = timestamp();
 
   for (int64_t i = 0; i < sample_count; i++) {
     double t = double(i) / double(sample_count);
-    t *= 2.0 * 3.14159265358979;
+
     t *= 100.0;
-    t = (1.0 - sin(t)) / 2.0;
+    t = fsin(t) * t * 0.01;
+    t = t * 0.5 + 0.5;
     t *= double(0xFFFFFFFF);
 
     int s = int(rng() <= t);
+    //s = 1;
 
-    line_bits[(i >> 5)] |= (s << (i & 31));
+    if ((i % 17327797) < 4537841) {
+      s = 0;
+    }
 
-    //line_d0[i >>  0] += s;
-    //line_d1[i >>  8] += s;
-    //line_d2[i >> 16] += s;
-    //line_d3[i >> 24] += s;
+    line.bits[(i >> 5)] |= (s << (i & 31));
+    line.count1[i >>  8] += s;
+    line.count2[i >> 16] += s;
+    line.count3[i >> 24] += s;
   }
 
-  printf("generating pattern done\n");
+  line.len = sample_count;
+
+  printf("%12.8f generating pattern done\n", timestamp() - time_a);
 
 }
 
 //----------
 
-int64_t count_bits(uint32_t* bitvec, int64_t len, int64_t a, int64_t b) {
-  if (a > b) { auto t = a; a = b; b = t; }
+int step_0 = 0;
+int step_1 = 0;
+int step_2 = 0;
+int step_3 = 0;
 
-  if (b < 0) return 0;
-  if (a >= len) return 0;
+/*
+step 0 12072
+step 1 439606
+step 2 63812
+step 3 0
+*/
 
-  if (a < 0) a = 0;
-  if (b > len) b = len;
-
+int64_t count_bits(bitvec* line, int64_t a, int64_t b) {
   int64_t head = a;
   int64_t tail = b - 1;
   uint32_t total = 0;
 
+  uint32_t head_mask = 0xFFFFFFFF << (head & 0x0000001f);
+
+
+  for (int64_t i = head; i <= tail; i++) {
+    total += (line->bits[i >> 5] >> (i & 31)) & 1;
+  }
+
+  /*
   int64_t head_cell = head >> 5;
   int64_t tail_cell = tail >> 5;
 
+  for (int64_t i = head_cell; i <= tail_cell; i++) {
+    total += __builtin_popcount(line->bits[i]);
+  }
+  */
+
+#if 0
   uint32_t head_mask = 0xFFFFFFFF << (head & 0x0000001f);
   uint32_t tail_mask = 0xFFFFFFFF >> (31 - (tail & 0x0000001f));
 
   if (head_cell == tail_cell) {
-    return __builtin_popcount(bitvec[head_cell] & head_mask & tail_mask);
+    return __builtin_popcount(line->bits[head_cell] & head_mask & tail_mask);
   }
 
-  total += __builtin_popcount(bitvec[head_cell] & head_mask);
+  int64_t cursor = a;
+  int64_t remain = b - a - 1;
 
-  for (int64_t cell = head_cell + 1; cell < tail_cell; cell++) {
-    total += __builtin_popcount(bitvec[cell]);
+  if (cursor & 0x1F && remain >= 0x1F) {
+    total += __builtin_popcount(line->bits[head_cell] & head_mask);
+    remain -= cursor & 0x1F;
+    cursor = (cursor + 0x1F) & ~0x1F;
   }
 
-  total += __builtin_popcount(bitvec[tail_cell] & tail_mask);
+  while (remain > 32) {
+    /*
+    if (((cursor & 0x00FFFFF) == 0) && remain >= 0x01000000) {
+      total += line->count3[cursor >> 24];
+      cursor += 0x01000000;
+      remain -= 0x01000000;
+      step_3++;
+    }
+    else if (((cursor & 0x0000FFFF) == 0) && remain >= 0x00010000) {
+      total += line->count2[cursor >> 16];
+      cursor += 0x00010000;
+      remain -= 0x00010000;
+      step_2++;
+    }
+    else if (((cursor & 0x000000FF) == 0) && remain >= 0x00000100) {
+      total += line->count1[cursor >> 8];
+      cursor += 0x00000100;
+      remain -= 0x00000100;
+      step_1++;
+    }
+    else
+    */
+    {
+      total += __builtin_popcount(line->bits[cursor >> 5]);
+      cursor += 0x00000020;
+      remain -= 0x00000020;
+      step_0++;
+    }
+  }
+
+  if (remain) {
+    total += __builtin_popcount(line->bits[cursor >> 5] & tail_mask);
+  }
+#endif
 
   return total;
+}
+
+int get_bit(bitvec* line, int64_t i) {
+  if (i < 0) return 0;
+  if (i >= line->len) return 0;
+  return (line->bits[i >> 5] >> (i & 31)) & 1;
 }
 
 //------------------------------------------------------------------------------
@@ -125,23 +201,6 @@ double remap(double x, double a1, double a2, double b1, double b2) {
 }
 
 int main(int argc, char* argv[]) {
-
-  /*
-  {
-    uint32_t somebits[4] = {
-      0b11111111111111110000000000000000,
-      0b00000000000000001111111111111111,
-      0b11111111111111111111111111111111,
-      0b00000000000000000000000011110000,
-    };
-    int len = sizeof(somebits) * 32;
-
-    int result;
-    result = count_bits(somebits, len, 17, 47);
-    printf("count %d\n", result);
-    return 0;
-  }
-  */
 
   count_init();
 
@@ -185,7 +244,12 @@ int main(int argc, char* argv[]) {
   //----------------------------------------
   // Main loop
 
+  zoom = 6.000000;
+  origin = 8427316.578125;
+
   while (!quit) {
+    //puts("\033[2J\033[H");
+
     //----------
     // Bookkeeping
 
@@ -210,14 +274,15 @@ int main(int argc, char* argv[]) {
 
       if (event.type == SDL_MOUSEWHEEL) {
         //printf("wheel\n");
-        //double zoom_per_tick = 0.25;
-        double zoom_per_tick = 1.0;
+        //double zoom_per_tick = 0.0625;
+        double zoom_per_tick = 0.25;
+        //double zoom_per_tick = 1.0;
         view_control.on_mouse_wheel(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
       }
 
       if (event.type == SDL_MOUSEMOTION) {
         if (event.motion.state & SDL_BUTTON_LMASK) {
-          printf("xrel %d\n", event.motion.xrel);
+          //printf("xrel %d\n", event.motion.xrel);
           //printf("mouse x %d\n", event.motion.x);
           //printf("yrel %d\n", event.motion.yrel);
           dvec2 rel = { (double)event.motion.xrel, (double)event.motion.yrel };
@@ -238,10 +303,13 @@ int main(int argc, char* argv[]) {
     int pitch;
     SDL_LockTexture(texture, NULL, (void**) & pixels, &pitch);
 
-    //zoom = -5.0 + 10.0 * sin(new_now * 0.5);
-    zoom = view_control.view_smooth_snap.view_zoom();
-    //origin = sample_count / 2.0 + sin(new_now * 1.1) * pow(2.0, -zoom) * 100.0;
+    zoom   = view_control.view_smooth_snap.view_zoom();
     origin = view_control.view_smooth_snap.world_center().x + sample_count / 2.0;
+
+    origin += sin(new_now * 1.0) * 1.0 * exp2(-zoom);
+
+    //printf("zoom %f\n", zoom);
+    //printf("origin %f\n", origin);
 
     double pixels_per_sample = pow(2, zoom);
     double samples_per_pixel = 1.0 / pixels_per_sample;
@@ -256,109 +324,204 @@ int main(int argc, char* argv[]) {
 
     double time_a = timestamp();
 
+    {
+      double sample_min = remap(0, bar_min, bar_max, view_min, view_max);
+      double sample_max = remap(1, bar_min, bar_max, view_min, view_max);
+      printf("pixel width in sample space %f\n", sample_max - sample_min);
+    }
+
+    step_0 = 0;
+    step_1 = 0;
+    step_2 = 0;
+    step_3 = 0;
+
+
     for (int x = 0; x < WINDOW_WIDTH; x++) {
+      filtered[x] = 0;
+
       double pixel_center = x + 0.5;
 
-      double sample_min = remap(pixel_center - 0.5, bar_min, bar_max, view_min, view_max);
-      double sample_max = remap(pixel_center + 0.5, bar_min, bar_max, view_min, view_max);
+      double sample_fmin = remap(pixel_center - 0.5, bar_min, bar_max, view_min, view_max);
+      double sample_fmax = remap(pixel_center + 0.5, bar_min, bar_max, view_min, view_max);
 
-      int64_t sample_imin = (int64_t)floor(sample_min);
-      int64_t sample_imax = (int64_t)floor(sample_max) + 1;
+      if (sample_fmin < 0)            sample_fmin = 0;
+      if (sample_fmax > sample_count) sample_fmax = sample_count;
 
-      int64_t len = sample_imax - sample_imin;
-      int64_t count = count_bits(line_bits, sample_count, sample_imin, sample_imax);
+      if (sample_fmax < 0)             { filtered[x] = 0; continue; }
+      if (sample_fmin >= sample_count) { filtered[x] = 0; continue; }
 
-      filtered[x] = double(count) / double(len);
+      // the 5 at the end there means 1/(2^5) subpixel precision, seems like a good compromise
+      double granularity = exp2(ceil(log2(sample_fmax - sample_fmin)) - 5);
+      sample_fmin = ceil (sample_fmin / granularity) * granularity;
+      sample_fmax = floor(sample_fmax / granularity) * granularity;
 
+      // Samples coords are 32.8 fixed point
 
+      int64_t sample_imin = (int64_t)floor(sample_fmin * 256.0);
+      int64_t sample_imax = (int64_t)floor(sample_fmax * 256.0);
 
-#if 0
-      if (sample_min < 0)            sample_min = 0;
-      if (sample_max > sample_count) sample_max = sample_count;
-
-      if (sample_max < 0) { filtered[x] = 0; continue; }
-      if (sample_min >= sample_count) { filtered[x] = 0; continue; }
-
-      // |--0--|--1--|--2--|--3--|
-      // 0-----1-----2-----3-----4
-      //          1..|-----|..3
-
-      int64_t sample_imin = int64_t(ceil(sample_min) - 1);
-      int64_t sample_imax = int64_t(floor(sample_max));
-
-      double sample_min_fract = sample_imin + 1.0 - sample_min;
-      double sample_max_fract = sample_max - sample_imax;
-      
-      if (floor(sample_min) == floor(sample_max)) {
-        if (zoom <= -8) {
-          filtered[x] = line_d1[sample_imin >> 8] * (1.0 / 256.0);
-        }
-        else {
-          filtered[x] = line_d0[sample_imin];
-        }
+      // Both endpoints are inside the same sample.
+      if ((sample_imin >> 8) == (sample_imax >> 8)) {
+        filtered[x] = get_bit(&line, sample_imin >> 8);
         continue;
       }
 
-      {
+      int64_t sample_ilen = sample_imax - sample_imin;
 
-        double accum_a = 0;
-        double accum_b = 0;
 
-        int64_t sample_cursor = sample_imin;
+      int64_t total = 0;
 
-        while (sample_cursor <= sample_imax) {
-          if (sample_cursor < 0) {
-            sample_cursor++;
-            continue;
-          }
-          if (sample_cursor >= sample_count) {
-            sample_cursor++;
-            continue;
-          }
-
-          double weight = 1.0;
-          if (sample_cursor == sample_imin) weight = sample_min_fract;
-          if (sample_cursor == sample_imax) weight = sample_max_fract;
-
-          if (zoom <= -8) {
-            accum_a += line_d1[sample_cursor >> 8] * weight * (1.0 / 256.0);
-          }
-          else {
-            accum_a += line_d0[sample_cursor] * weight;
-          }
-          accum_b += weight;
-          sample_cursor++;
-        }
-
-        filtered[x] = (accum_a / (sample_max - sample_min));
+      if (sample_imin & 0xFF) {
+        double head_fract = 256 - (sample_imin & 0xFF);
+        total += head_fract * get_bit(&line, sample_imin >> 8);
+        sample_imin = (sample_imin + 0xFF) & ~0xFF;
       }
 
-      double divider_lerp = remap(zoom, 2.0, 4.0, 0.0, 1.0);
-      if (divider_lerp < 0) divider_lerp = 0;
-      if (divider_lerp > 1) divider_lerp = 1;
-
-      if (ceil(sample_min) == floor(sample_max)) {
-        double with_divider = filtered[x] * 0.6 + 0.1;
-        filtered[x] = (filtered[x] * (1.0 - divider_lerp)) + (with_divider * divider_lerp);
+      if (sample_imax & 0xFF) {
+        double tail_fract = sample_imax & 0xFF;
+        total += tail_fract * get_bit(&line, sample_imax >> 8);
+        sample_imax = sample_imax & ~0xFF;
       }
-#endif
+
+      // Samples coords are now 32-bit integers
+
+      assert(((sample_imax - sample_imin) & 0xFF) == 0);
+      sample_imin >>= 8;
+      sample_imax >>= 8;
+
+      // Both endpoints are inside the same 32-sample block, this is the last step.
+      if ((sample_imin >> 5) == ((sample_imax - 1) >> 5)) {
+        uint32_t mask_min = 0xFFFFFFFF << (sample_imin & 0x1f);
+        uint32_t mask_max = 0xFFFFFFFF >> (31 - ((sample_imax - 1) & 0x1f));
+        uint32_t mask = mask_min & mask_max;
+        total += __builtin_popcount(line.bits[sample_imin >> 5] & mask) * 256;
+        filtered[x] = double(total) / double(sample_ilen);
+        continue;
+      }
+
+      if (sample_imin & 0x1F) {
+        uint32_t mask_min = 0xFFFFFFFF << (sample_imin & 0x1f);
+        total += __builtin_popcount(line.bits[sample_imin >> 5] & mask_min) * 256;
+        sample_imin = (sample_imin + 0x1f) & ~0x1f;
+      }
+
+      if (sample_imax & 0x1F) {
+        uint32_t mask_max = 0xFFFFFFFF >> (31 - ((sample_imax - 1) & 0x1f));
+        total += __builtin_popcount(line.bits[sample_imax >> 5] & mask_max) * 256;
+        sample_imax = (sample_imax) & ~0x1f;
+      }
+
+      // Endpoints are now at multpiles of 32 samples.
+
+      if (sample_imin == sample_imax) {
+        filtered[x] = double(total) / double(sample_ilen);
+        continue;
+      }
+
+      // Roll sample_imin forward to the next chunk of 256 samples
+      while ((sample_imin & 0xFF) && (sample_imin < sample_imax)) {
+        step_0++;
+        total += __builtin_popcount(line.bits[sample_imin >> 5]) * 256;
+        sample_imin += 32;
+      }
+
+      // Roll sample_imax backwards to the end of the previous chunk of 256 samples.
+      while ((sample_imax & 0xFF) && (sample_imax > sample_imin)) {
+        step_0++;
+        total += __builtin_popcount(line.bits[(sample_imax - 1) >> 5]) * 256;
+        sample_imax -= 32;
+      }
+
+      // Endpoints are now at multpiles of 256 samples.
+
+      if (sample_imin == sample_imax) {
+        filtered[x] = double(total) / double(sample_ilen);
+        continue;
+      }
+
+      while ((sample_imin & 0xFFFF) && (sample_imin < sample_imax)) {
+        step_1++;
+        total += line.count1[sample_imin >> 8] * 256;
+        sample_imin += 256;
+      }
+
+      while ((sample_imax & 0xFFFF) && (sample_imin < sample_imax)) {
+        step_1++;
+        total += line.count1[(sample_imax - 1) >> 8] * 256;
+        sample_imax -= 256;
+      }
+
+      // Endpoints are now at multpiles of 65536 samples.
+
+      if (sample_imin == sample_imax) {
+        filtered[x] = double(total) / double(sample_ilen);
+        continue;
+      }
+
+      while ((sample_imin && 0xFFFFFF) && (sample_imin < sample_imax)) {
+        step_2++;
+        total += line.count2[sample_imin >> 16] * 256;
+        sample_imin += 65536;
+      }
+
+      while ((sample_imax & 0xFFFFFF) && (sample_imin < sample_imax)) {
+        step_2++;
+        total += line.count2[(sample_imax - 1) >> 16] * 256;
+        sample_imax -= 65536;
+      }
+
+      // Endpoints are now at multpiles of 16777216 samples.
+
+      if (sample_imin == sample_imax) {
+        filtered[x] = double(total) / double(sample_ilen);
+        continue;
+      }
+
+      for (int64_t i = sample_imin; i < sample_imax; i += 16777216) {
+        step_3++;
+        total += line.count3[i >> 24] * 256;
+      }
+
+      /*
+      for (int64_t i = sample_imin; i < sample_imax; i++) {
+        total += get_bit(&line, i) * 256;
+      }
+      */
+
+
+      /*
+      double head_fract = 1 - (sample_min - floor(sample_min));
+      double tail_fract = sample_max - floor(sample_max);
+
+      int head_bit = get_bit(&line, sample_imin);
+      int body_bit = count_bits(&line, sample_imin + 1, sample_imax);
+      int tail_bit = get_bit(&line, sample_imax);
+
+      filtered[x] = ((head_bit * head_fract) + body_bit + (tail_bit * tail_fract)) / (sample_max - sample_min);
+      */
+
+      filtered[x] = double(total) / double(sample_ilen);
     }
 
     double time_b = timestamp();
-    printf("update took %f\n", time_b - time_a);
+    printf("update took %12.6f\n", time_b - time_a);
+    printf("step 0 %d\n", step_0);
+    printf("step 1 %d\n", step_1);
+    printf("step 2 %d\n", step_2);
+    printf("step 3 %d\n", step_3);
+    fflush(stdout);
 
     //----------
     // Render
 
     for (int y = 128 - 8; y < 128-4; y++) {
       for (int x = 0; x < WINDOW_WIDTH; x++) {
-        pixels[x + y * (pitch / sizeof(uint32_t))] = 0xFFFFFFFF;
+        pixels[x + y * (pitch / sizeof(uint32_t))] = 0x7F7F7FFF;
       }
     }
     for (int y = 128; y < 128+64; y++) {
       for (int x = 0; x < WINDOW_WIDTH; x++) {
         double s = filtered[x];
-        //s = sqrt(s);
         s = (s < 0.0031308) ? 12.92 * s : (1.0 + 0.055) * pow(s, 1.0 / 2.4) - 0.055;
         int v = (int)floor(s * 255.0);
         uint32_t color = (v << 24) | (v << 16) | (v << 8) | 0xFF;

@@ -3,9 +3,6 @@
 #include <stdint.h>
 #include <math.h>
 
-double ppw_to_zoom(double ppw);
-double zoom_to_ppw(double ppw);
-
 //-----------------------------------------------------------------------------
 
 double ease(double a, double b, double delta) {
@@ -44,8 +41,7 @@ Viewport ease(Viewport a, Viewport b, double delta) {
   dvec2 world_min = ease(world_min_a, world_min_b, delta);
   dvec2 world_max = ease(world_max_a, world_max_b, delta);
 
-  double ppw = 1.0 / (world_max.x - world_min.x);
-  double zoom = ppw_to_zoom(ppw);
+  double zoom = -log2(world_max.x - world_min.x);
 
   return Viewport{
     (world_min + world_max) * 0.5,
@@ -63,22 +59,6 @@ union double_funtimes {
   };
 };
 
-double ppw_to_zoom(double ppw) {
-  double_funtimes f;
-  f.value = ppw;
-  return double(int(f.exponent) - 1023) + double(f.mantissa) / exp2(52);
-}
-
-double zoom_to_ppw(double zoom) {
-  double zoom_i = floor(zoom);
-  double zoom_f = zoom - zoom_i;
-  double_funtimes f;
-  f.mantissa = uint64_t(zoom_f * exp2(52));
-  f.exponent = uint64_t(zoom_i + 1023);
-  f.sign = 0;
-  return f.value;
-}
-
 //-----------------------------------------------------------------------------
 
 Viewport Viewport::from_center_zoom(dvec2 center, double zoom) {
@@ -93,11 +73,11 @@ double Viewport::view_zoom() const {
 }
 
 double Viewport::scale_world_to_screen() const {
-  return zoom_to_ppw(_view_zoom);
+  return exp2(_view_zoom);
 }
 
 double Viewport::scale_screen_to_world() const {
-  return 1.0 / zoom_to_ppw(_view_zoom);
+  return 1.0 / exp2(_view_zoom);
 }
 
 dvec2 Viewport::screen_min(dvec2 screen_size) const {
@@ -153,8 +133,8 @@ Viewport Viewport::zoom(dvec2 screen_pos, dvec2 screen_size, double zoom) {
 
   auto new_center =
     world_center()
-    + screen_delta / (zoom_to_ppw(old_zoom))
-    - screen_delta / (zoom_to_ppw(new_zoom));
+    + screen_delta / (exp2(old_zoom))
+    - screen_delta / (exp2(new_zoom));
 
   return Viewport::from_center_zoom(new_center, new_zoom);
 }
@@ -171,7 +151,7 @@ Viewport Viewport::pan(dvec2 screen_delta) {
 Viewport Viewport::snap() {
   double zoom1 = view_zoom();
   double zoom2 = round(zoom1 * 4.0) / 4.0;
-  double ppw2 = zoom_to_ppw(zoom2);
+  double ppw2 = exp2(zoom2);
 
   dvec2 old_center = world_center();
   dvec2 new_center = { round(old_center.x * ppw2) / ppw2, round(old_center.y * ppw2) / ppw2 };
