@@ -38,10 +38,11 @@ uint32_t rng() {
 
 //------------------------------------------------------------------------------
 
-const int64_t sample_count = 4ll * 1024ll * 1024ll * 1024ll;
-//const int64_t sample_count = 16 * 1024 * 1024;
+//const int64_t sample_count = 4ll * 1024ll * 1024ll * 1024ll;
+const int64_t sample_count = 16 * 1024 * 1024;
 
-struct bitvec {
+struct mybitvec {
+  mybitvec() {}
   int64_t len;
   uint32_t bits  [sample_count / 32];
   uint32_t count1[sample_count / 256];
@@ -49,7 +50,7 @@ struct bitvec {
   uint32_t count3[sample_count / 16777216];
 };
 
-bitvec line;
+mybitvec* line = nullptr;
 
 //----------
 // Crappy cubic sin(2*pi*x) approximation
@@ -60,7 +61,8 @@ double fsin(double x) {
 }
 
 void count_init() {
-  memset(&line, 0, sizeof(line));
+  line = new mybitvec();
+  memset(line, 0, sizeof(mybitvec));
 
   printf("generating pattern\n");
   auto time_a = timestamp();
@@ -80,13 +82,13 @@ void count_init() {
       s = 0;
     }
 
-    line.bits[(i >> 5)] |= (s << (i & 31));
-    line.count1[i >>  8] += s;
-    line.count2[i >> 16] += s;
-    line.count3[i >> 24] += s;
+    line->bits[(i >> 5)] |= (s << (i & 31));
+    line->count1[i >>  8] += s;
+    line->count2[i >> 16] += s;
+    line->count3[i >> 24] += s;
   }
 
-  line.len = sample_count;
+  line->len = sample_count;
 
   printf("%12.8f generating pattern done\n", timestamp() - time_a);
 
@@ -106,7 +108,7 @@ step 2 63812
 step 3 0
 */
 
-int64_t count_bits(bitvec* line, int64_t a, int64_t b) {
+int64_t count_bits(mybitvec* line, int64_t a, int64_t b) {
   int64_t head = a;
   int64_t tail = b - 1;
   uint32_t total = 0;
@@ -182,7 +184,7 @@ int64_t count_bits(bitvec* line, int64_t a, int64_t b) {
   return total;
 }
 
-int get_bit(bitvec* line, int64_t i) {
+int get_bit(mybitvec* line, int64_t i) {
   if (i < 0) return 0;
   if (i >= line->len) return 0;
   return (line->bits[i >> 5] >> (i & 31)) & 1;
@@ -351,7 +353,7 @@ int main(int argc, char* argv[]) {
       if (sample_fmin >= sample_count) { filtered[x] = 0; continue; }
 
       // the 5 at the end there means 1/(2^5) subpixel precision, seems like a good compromise
-      double granularity = exp2(ceil(log2(sample_fmax - sample_fmin)) - 5);
+      double granularity = exp2(ceil(log2(sample_fmax - sample_fmin)) - 8);
       sample_fmin = ceil (sample_fmin / granularity) * granularity;
       sample_fmax = floor(sample_fmax / granularity) * granularity;
 
@@ -362,7 +364,7 @@ int main(int argc, char* argv[]) {
 
       // Both endpoints are inside the same sample.
       if ((sample_imin >> 8) == (sample_imax >> 8)) {
-        filtered[x] = get_bit(&line, sample_imin >> 8);
+        filtered[x] = get_bit(line, sample_imin >> 8);
         continue;
       }
 
@@ -373,13 +375,13 @@ int main(int argc, char* argv[]) {
 
       if (sample_imin & 0xFF) {
         double head_fract = 256 - (sample_imin & 0xFF);
-        total += head_fract * get_bit(&line, sample_imin >> 8);
+        total += head_fract * get_bit(line, sample_imin >> 8);
         sample_imin = (sample_imin + 0xFF) & ~0xFF;
       }
 
       if (sample_imax & 0xFF) {
         double tail_fract = sample_imax & 0xFF;
-        total += tail_fract * get_bit(&line, sample_imax >> 8);
+        total += tail_fract * get_bit(line, sample_imax >> 8);
         sample_imax = sample_imax & ~0xFF;
       }
 
@@ -394,20 +396,20 @@ int main(int argc, char* argv[]) {
         uint32_t mask_min = 0xFFFFFFFF << (sample_imin & 0x1f);
         uint32_t mask_max = 0xFFFFFFFF >> (31 - ((sample_imax - 1) & 0x1f));
         uint32_t mask = mask_min & mask_max;
-        total += __builtin_popcount(line.bits[sample_imin >> 5] & mask) * 256;
+        total += __builtin_popcount(line->bits[sample_imin >> 5] & mask) * 256;
         filtered[x] = double(total) / double(sample_ilen);
         continue;
       }
 
       if (sample_imin & 0x1F) {
         uint32_t mask_min = 0xFFFFFFFF << (sample_imin & 0x1f);
-        total += __builtin_popcount(line.bits[sample_imin >> 5] & mask_min) * 256;
+        total += __builtin_popcount(line->bits[sample_imin >> 5] & mask_min) * 256;
         sample_imin = (sample_imin + 0x1f) & ~0x1f;
       }
 
       if (sample_imax & 0x1F) {
         uint32_t mask_max = 0xFFFFFFFF >> (31 - ((sample_imax - 1) & 0x1f));
-        total += __builtin_popcount(line.bits[sample_imax >> 5] & mask_max) * 256;
+        total += __builtin_popcount(line->bits[sample_imax >> 5] & mask_max) * 256;
         sample_imax = (sample_imax) & ~0x1f;
       }
 
@@ -421,14 +423,14 @@ int main(int argc, char* argv[]) {
       // Roll sample_imin forward to the next chunk of 256 samples
       while ((sample_imin & 0xFF) && (sample_imin < sample_imax)) {
         step_0++;
-        total += __builtin_popcount(line.bits[sample_imin >> 5]) * 256;
+        total += __builtin_popcount(line->bits[sample_imin >> 5]) * 256;
         sample_imin += 32;
       }
 
       // Roll sample_imax backwards to the end of the previous chunk of 256 samples.
       while ((sample_imax & 0xFF) && (sample_imax > sample_imin)) {
         step_0++;
-        total += __builtin_popcount(line.bits[(sample_imax - 1) >> 5]) * 256;
+        total += __builtin_popcount(line->bits[(sample_imax - 1) >> 5]) * 256;
         sample_imax -= 32;
       }
 
@@ -441,13 +443,13 @@ int main(int argc, char* argv[]) {
 
       while ((sample_imin & 0xFFFF) && (sample_imin < sample_imax)) {
         step_1++;
-        total += line.count1[sample_imin >> 8] * 256;
+        total += line->count1[sample_imin >> 8] * 256;
         sample_imin += 256;
       }
 
       while ((sample_imax & 0xFFFF) && (sample_imin < sample_imax)) {
         step_1++;
-        total += line.count1[(sample_imax - 1) >> 8] * 256;
+        total += line->count1[(sample_imax - 1) >> 8] * 256;
         sample_imax -= 256;
       }
 
@@ -460,13 +462,13 @@ int main(int argc, char* argv[]) {
 
       while ((sample_imin && 0xFFFFFF) && (sample_imin < sample_imax)) {
         step_2++;
-        total += line.count2[sample_imin >> 16] * 256;
+        total += line->count2[sample_imin >> 16] * 256;
         sample_imin += 65536;
       }
 
       while ((sample_imax & 0xFFFFFF) && (sample_imin < sample_imax)) {
         step_2++;
-        total += line.count2[(sample_imax - 1) >> 16] * 256;
+        total += line->count2[(sample_imax - 1) >> 16] * 256;
         sample_imax -= 65536;
       }
 
@@ -479,7 +481,7 @@ int main(int argc, char* argv[]) {
 
       for (int64_t i = sample_imin; i < sample_imax; i += 16777216) {
         step_3++;
-        total += line.count3[i >> 24] * 256;
+        total += line->count3[i >> 24] * 256;
       }
 
       /*

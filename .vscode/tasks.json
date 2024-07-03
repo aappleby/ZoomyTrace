@@ -4,16 +4,20 @@
   "version": "2.0.0",
   "tasks": [
     {
-      "label": "build",
+      "label": "build_zoomytrace",
       "type": "shell",
       "command": "hancho",
-      "problemMatcher": [
-        "$gcc"
-      ],
-      "group": {
-        "kind": "build",
-        "isDefault": true
-      }
+      "problemMatcher": ["$gcc"],
+      "options":{ "cwd": "${workspaceFolder}" },
+      "group": { "kind": "build", /*"isDefault": true*/ }
+    },
+    {
+      "label": "build_logicdump",
+      "type": "shell",
+      "command": "hancho",
+      "problemMatcher": ["$gcc"],
+      "options":{ "cwd": "${workspaceFolder}/logicdump" },
+      "group": { "kind": "build", /*"isDefault": true*/ }
     }
   ]
 }

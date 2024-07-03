@@ -5,19 +5,28 @@
   "version": "0.2.0",
   "configurations": [
     {
-      "name": "C++ Launch",
+      "name": "zoomytrace",
       "type": "cppdbg",
       "request": "launch",
       "cwd": "${workspaceFolder}",
       "program": "${workspaceFolder}/build/ZoomyTrace",
-      //"externalConsole": true,
       "logging": {
         "moduleLoad": false,
         "trace": true
       },
-      "visualizerFile": "${workspaceFolder}/my.natvis",
-      "showDisplayString": true,
-      "preLaunchTask": "build",
+      "preLaunchTask": "build_zoomytrace",
+    },
+    {
+      "name": "logicdump",
+      "type": "cppdbg",
+      "request": "launch",
+      "cwd": "${workspaceFolder}",
+      "program": "${workspaceFolder}/logicdump/build/logicdump/main",
+      "logging": {
+        "moduleLoad": false,
+        "trace": true
+      },
+      "preLaunchTask": "build_logicdump",
     }
   ]
 }

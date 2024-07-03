@@ -1,0 +1,17 @@
+{
+  "name": "webusb_test",
+  "module": "index.tsx",
+  "type": "module",
+  "devDependencies": {
+    "@types/bun": "^1.1.5"
+  },
+  "peerDependencies": {
+    "typescript": "^5.0.0"
+  },
+  "scripts": {
+    "server": "bun index.tsx"
+  },
+  "dependencies": {
+    "react": "^18.3.1"
+  }
+}
