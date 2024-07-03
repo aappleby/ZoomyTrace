@@ -185,17 +185,15 @@ int my_hotplug_callback(
   libusb_get_device_descriptor(device, &desc);
 
   if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_ARRIVED) {
-    printf("Device 0x%04x:0x%04x arrived\n", desc.idVendor, desc.idProduct);
-
     if (desc.idVendor == SALEAE_VID && desc.idProduct == SALEAE_PID) {
+      printf("Device 0x%04x:0x%04x arrived\n", desc.idVendor, desc.idProduct);
       saw_reconnect = true;
     }
-
   }
 
   if (event == LIBUSB_HOTPLUG_EVENT_DEVICE_LEFT) {
-    printf("Device 0x%04x:0x%04x left\n", desc.idVendor, desc.idProduct);
     if (desc.idVendor == SALEAE_VID && desc.idProduct == SALEAE_PID) {
+      printf("Device 0x%04x:0x%04x left\n", desc.idVendor, desc.idProduct);
       saw_disconnect = true;
     }
   }
@@ -206,17 +204,15 @@ int my_hotplug_callback(
 
 //------------------------------------------------------------------------------
 
-#define CHECK(func) { auto ret = (func); if (ret < 0) { printf("libusberror %s@%d = %d\n", __FILE__, __LINE__, (ret)); return -1; } }
+#define CHECK(func) { auto ret = (func); if (ret < 0) { printf("libusberror %s@%d = %s\n", __FILE__, __LINE__, libusb_error_name(ret)); return ret; } }
 
 int ezusb_reset(struct libusb_device_handle *hdl, int set_clear) {
-	int ret;
 	unsigned char buf[1];
 	buf[0] = set_clear ? 1 : 0;
-	ret = libusb_control_transfer(hdl, LIBUSB_REQUEST_TYPE_VENDOR, 0xa0, 0xe600, 0x0000, buf, 1, 100);
-	if (ret < 0)
-		printf("Unable to send control request: %s.", libusb_error_name(ret));
-
-	return ret;
+  // Don't check here, this can fail
+	int reset_result = libusb_control_transfer(hdl, LIBUSB_REQUEST_TYPE_VENDOR, 0xa0, 0xe600, 0x0000, buf, 1, 100);
+  printf("reset_result(%d) = %d\n", set_clear, reset_result);
+	return 0;
 }
 
 libusb_context* ctx = nullptr;
@@ -322,7 +318,8 @@ int capture() {
     }
 
     printf("Resuming CPU\n");
-    CHECK(ezusb_reset(hdev, 0));
+    // Don't check here, this can fail
+    ezusb_reset(hdev, 0);
 
     printf("Closing device handle\n");
     CHECK(libusb_release_interface(hdev, 0));
