@@ -5,8 +5,10 @@
 #include <stdio.h>
 #include <assert.h>
 
-int get_bit(void* buf, size_t sample_count, uint32_t i);
-
+inline int get_bit(void* buf, size_t i) {
+  uint64_t* buf64 = (uint64_t*)buf;
+  return (buf64[i >> 6] >> (i & 63)) & 1;
+}
 
 void gen_pattern(void* buf, size_t sample_count);
 
@@ -155,7 +157,7 @@ struct BitBuf {
 
       for (size_t y = 0; y < rows; y++) {
         for (size_t x = 0; x < cols; x++) {
-          putc(get_bit(bits, sample_count, cursor++) ? '1' : '0', stdout);
+          putc(get_bit(bits, cursor++) ? '1' : '0', stdout);
           if (cursor == sample_count) break;
         }
         putc('\n', stdout);

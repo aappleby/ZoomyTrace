@@ -6,13 +6,6 @@
 
 //------------------------------------------------------------------------------
 
-int get_bit(void* buf, size_t sample_count, uint32_t i) {
-  uint64_t* buf64 = (uint64_t*)buf;
-  if (i >= sample_count) return 0;
-  return (buf64[i >> 6] >> (i & 63)) & 1;
-}
-
-
 void gen_pattern(void* buf, size_t sample_count) {
 
   printf("generating pattern\n");
@@ -21,6 +14,17 @@ void gen_pattern(void* buf, size_t sample_count) {
 
   uint32_t* bits = (uint32_t*)buf;
 
+  uint32_t x = 1;
+  for (size_t i = 0; i < sample_count; i++) {
+    size_t t = i;
+    t = t*((t>>9|t>>13)&25&t>>6);
+    //t *= 0x123;
+    //t ^= t >> 27;
+    t = __builtin_parity(t);
+    bits[(i >> 5)] |= (t << (i & 31));
+  }
+
+  /*
   for (size_t i = 0; i < sample_count; i++) {
     double t = double(i) / double(sample_count);
 
@@ -34,6 +38,7 @@ void gen_pattern(void* buf, size_t sample_count) {
 
     bits[(i >> 5)] |= (s << (i & 31));
   }
+  */
 
   printf("generating pattern done in %12.8f sec\n", timestamp() - time_a);
 }
@@ -64,11 +69,11 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
   const uint64_t mip3_mask = 0b00000001111111000000000000000000000ull;
   const uint64_t mip4_mask = 0b11111110000000000000000000000000000ull;
 
-  const int mip0_weight = 128;
-  const int mip1_weight = 128;
-  const int mip2_weight = 128 * 128;
-  const int mip3_weight = 128 * 128 * 128;
-  const int mip4_weight = 128 * 128 * 128 * 128;
+  const uint64_t mip0_weight = 128;
+  const uint64_t mip1_weight = 128;
+  const uint64_t mip2_weight = 128 * 128;
+  const uint64_t mip3_weight = 128 * 128 * 128;
+  const uint64_t mip4_weight = 128 * 128 * 128 * 128;
 
   // We compute a "granularity" based on the width of each pixel in trace-space
   // so that we can reduce the precision of the span endpoints and skip lower
@@ -114,18 +119,18 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
 
     // Both endpoints are inside the same sample.
     if ((sample_imin >> 7) == (sample_imax >> 7)) {
-      filtered[x] = get_bit(bits, sample_count, sample_imin >> 7);
+      filtered[x] = get_bit(bits, sample_imin >> 7);
       mip0_hit++;
       continue;
     }
 
-    int64_t sample_ilen = sample_imax - sample_imin;
-    int64_t total = 0;
+    uint64_t sample_ilen = sample_imax - sample_imin;
+    uint64_t total = 0;
 
     // Add the contribution from the fractional portion of the first sample.
     if (sample_imin & 0x7F) {
       double head_fract = 128 - (sample_imin & 0x7F);
-      total += head_fract * get_bit(bits, sample_count, sample_imin >> 7);
+      total += head_fract * get_bit(bits, sample_imin >> 7);
       sample_imin = (sample_imin + 0x7F) & ~0x7F;
       mip0_hit++;
     }
@@ -133,7 +138,7 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
     // Add the contribution from the fractional portion of the last sample.
     if (sample_imax & 0x7F) {
       double tail_fract = sample_imax & 0x7F;
-      total += tail_fract * get_bit(bits, sample_count, sample_imax >> 7);
+      total += tail_fract * get_bit(bits, sample_imax >> 7);
       sample_imax = sample_imax & ~0x7F;
       mip0_hit++;
     }
@@ -154,13 +159,13 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
 
     if ((sample_imin & mip0_mask) || (sample_imax & mip0_mask)) {
       while ((sample_imin & mip0_mask) && (sample_imin < sample_imax)) {
-        total += get_bit(bits, sample_count, sample_imin >> mip0_shift) * mip0_weight;
+        total += get_bit(bits, sample_imin >> mip0_shift) * mip0_weight;
         sample_imin += mip0_size;
         mip0_hit++;
       }
 
       while ((sample_imax & mip0_mask) && (sample_imin < sample_imax)) {
-        total += get_bit(bits, sample_count, (sample_imax - 1) >> mip0_shift) * mip0_weight;
+        total += get_bit(bits, (sample_imax - 1) >> mip0_shift) * mip0_weight;
         sample_imax -= mip0_size;
         mip0_hit++;
       }

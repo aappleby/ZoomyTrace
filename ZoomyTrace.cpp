@@ -26,7 +26,8 @@
 int main(int argc, char* argv[]) {
 
   BitBuf buf;
-  size_t sample_count = 4ull * 1024ull * 1024ull * 1024ull;
+  //size_t sample_count = 32ull * 1024ull * 1024ull * 1024ull;
+  size_t sample_count = 1024ull * 1024ull;
   buf.init(sample_count);
   gen_pattern(buf.bits, sample_count);
   buf.update();
