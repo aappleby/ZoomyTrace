@@ -1,12 +1,58 @@
 import hancho
 
-hancho.Task(
-  command = [
-    "mkdir -p build",
-    "g++ {opt} -g -MMD -c ViewController.cpp -o build/ViewController.o",
-    "g++ {opt} -g -MMD -c ZoomyTrace.cpp -o build/ZoomyTrace.o",
-    "g++ {opt} -g -MMD build/ViewController.o build/ZoomyTrace.o -o build/ZoomyTrace -lm -lSDL2",
-  ],
-  #opt = "-O3",
-  opt = "-O0",
+import hancho
+import glob
+
+compile = hancho.Command(
+  desc    = "Compiling {in_src}",
+  command = "g++ -std=c++20 -g -MMD {opt} {warnings} -c {in_src} -o {out_obj}",
+
+  #opt = "-O0",
+  opt = "-O3",
+  warnings = "-Wall -Werror -Wno-deprecated-enum-enum-conversion -Wno-unused-variable",
+  out_obj  = "{swap_ext(in_src, '.o')}",
+  depfile  = "{swap_ext(in_src, '.d')}",
 )
+
+link = hancho.Command(
+  desc    = "Linking {out_bin}",
+  command = "gcc -std=c++20 -g -MMD {in_objs} {libs} -o {out_bin} ",
+  libs    = "-lusb-1.0 -lstdc++ -lSDL2 -lm",
+)
+
+imgui_o    = [compile(in_src = f) for f in glob.glob("imgui/*.cpp")]
+glad_o     = compile(in_src = "glad/glad.c")
+main_o     = compile(in_src = "main.cpp")
+capture_o  = compile(in_src = "capture.cpp")
+glbase_o   = compile(in_src = "GLBase.cpp")
+gui_o      = compile(in_src = "gui.cpp")
+firmware_o = compile(in_src = "firmware.cpp")
+log_o      = compile(in_src = "log.cpp")
+zoomy_o    = compile(in_src = "ZoomyTrace.cpp")
+view_o     = compile(in_src = "ViewController.cpp")
+bitchunk_o = compile(in_src = "BitChunk.cpp")
+
+main = link(
+  in_objs = [main_o, capture_o, glbase_o, gui_o, glad_o, imgui_o, firmware_o, log_o, bitchunk_o],
+  #in_objs = [main_o, capture_o, firmware_o],
+  out_bin = "main",
+)
+
+
+
+zoomytrace = link(
+  in_objs = [zoomy_o, view_o, bitchunk_o, log_o, imgui_o],
+  out_bin = "ZoomyTrace",
+)
+
+
+#hancho.Task(
+#  command = [
+#    "mkdir -p build",
+#    "g++ -Wall -Werror {opt} -g -MMD -c ViewController.cpp -o build/ViewController.o",
+#    "g++ -Wall -Werror {opt} -g -MMD -c ZoomyTrace.cpp -o build/ZoomyTrace.o",
+#    "g++ -Wall -Werror {opt} -g -MMD build/ViewController.o build/ZoomyTrace.o -o build/ZoomyTrace -lm -lSDL2",
+#  ],
+#  #opt = "-O3",
+#  opt = "-O0",
+#)
