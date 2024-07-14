@@ -1,8 +1,7 @@
 #include "GLBase.h"
-#include "glad/glad.h"
+#include "symlinks/glad/glad.h"
 #include <SDL2/SDL.h>
 #include <assert.h>
-#include <vector>
 #include <map>
 
 //------------------------------------------------------------------------------
@@ -51,6 +50,76 @@ void APIENTRY debugOutput(GLenum source, GLenum type, GLuint id, GLenum severity
     messageMap[severity],
     id,
     message);
+}
+
+//------------------------------------------------------------------------------
+
+SDL_Window* create_gl_window(const char* name, int initial_screen_w, int initial_screen_h) {
+  SDL_Init(SDL_INIT_EVERYTHING);
+  //SDL_Init(SDL_INIT_VIDEO);
+
+  SDL_Window* window = SDL_CreateWindow(
+    name,
+    SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
+    1920, 1080,
+    SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI
+  );
+
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS,
+                      SDL_GL_CONTEXT_DEBUG_FLAG
+                      //| SDL_GL_CONTEXT_ROBUST_ACCESS_FLAG
+                      //| SDL_GL_CONTEXT_FORWARD_COMPATIBLE_FLAG
+                      );
+
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_PROFILE_MASK, SDL_GL_CONTEXT_PROFILE_CORE);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 4);
+  SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 6);
+
+  SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+  SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+  SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+
+  SDL_GLContext gl_context = SDL_GL_CreateContext((SDL_Window*)window);
+
+  SDL_GL_SetSwapInterval(1);  // Enable vsync
+  //SDL_GL_SetSwapInterval(0); // Disable vsync
+
+  gladLoadGLLoader(SDL_GL_GetProcAddress);
+
+  glEnable(GL_DEBUG_OUTPUT);
+  glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
+  glDebugMessageControl(GL_DONT_CARE, GL_DONT_CARE, GL_DONT_CARE, 0, nullptr, GL_TRUE);
+  glDebugMessageCallback(debugOutput, nullptr);
+
+  glDisable(GL_CULL_FACE);
+
+  int ext_count = 0;
+  glGetIntegerv(GL_NUM_EXTENSIONS, &ext_count);
+
+  printf("Vendor:   "); printf("%s\n", glGetString(GL_VENDOR));
+  printf("Renderer: "); printf("%s\n", glGetString(GL_RENDERER));
+  printf("Version:  "); printf("%s\n", glGetString(GL_VERSION));
+  printf("GLSL:     "); printf("%s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
+  printf("Ext count "); printf("%d\n", ext_count);
+
+#if 0
+  for (int i = 0; i < ext_count; i++) {
+    LOG_B("Ext %2d: %s\n", i, glGetStringi(GL_EXTENSIONS, i));
+  }
+#endif
+
+  //----------------------------------------
+  // Set initial GL state
+
+  glDisable(GL_DEPTH_TEST);
+  glDepthFunc(GL_LEQUAL);
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
+  glClearColor(0.1, 0.1, 0.2, 0.0);
+  glClearDepth(1.0);
+
+  return window;
 }
 
 //-----------------------------------------------------------------------------
@@ -198,6 +267,32 @@ void bind_ubo(int prog, const char* name, int index, int ubo) {
 }
 
 //-----------------------------------------------------------------------------
+// hasn't been tested yet beware
+
+int create_ssbo(size_t size_bytes) {
+  GLuint ssbo;
+  glGenBuffers(1, &ssbo);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+  glBufferStorage(GL_SHADER_STORAGE_BUFFER, size_bytes, nullptr,
+    GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_DYNAMIC_STORAGE_BIT);
+  return (int)ssbo;
+}
+
+void update_ssbo(int ssbo, const void* data, size_t size_bytes) {
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+  glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, size_bytes, data);
+}
+
+void bind_ssbo(int ssbo, int binding) {
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+  glBindBufferBase(GL_SHADER_STORAGE_BUFFER, binding, ssbo);
+}
+
+void unbind_ssbo() {
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, 0);
+}
+
+//-----------------------------------------------------------------------------
 
 int create_texture_u32(int width, int height, const void* data, bool filter) {
   int tex = 0;
@@ -335,8 +430,8 @@ int create_shader(const char* name, const char* src) {
   printf("Compiling %s\n", name);
 
   auto vert_srcs = {
-    //"#version 450\n",
-    "#version 330\n"
+    "#version 460 core\n",
+    //"#extension GL_NV_gpu_shader5 : enable\n",
     "precision highp float;\n",
     "precision highp int;\n",
     "precision highp usampler2D;\n",
@@ -359,8 +454,8 @@ int create_shader(const char* name, const char* src) {
   }
 
   auto frag_srcs = {
-    //"#version 450\n",
-    "#version 330\n"
+    "#version 460 core\n",
+    //"#extension GL_NV_gpu_shader5 : enable\n",
     "precision highp float;\n",
     "precision highp int;\n",
     "precision highp usampler2D;\n",

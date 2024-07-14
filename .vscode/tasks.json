@@ -6,7 +6,7 @@
     {
       "label": "build_all",
       "type": "shell",
-      "command": "hancho --force",
+      "command": "hancho",
       "problemMatcher": ["$gcc"],
       "options":{ "cwd": "${workspaceFolder}" },
       "group": { "kind": "build", "isDefault": true },

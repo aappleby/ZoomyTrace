@@ -9,19 +9,7 @@
       "type": "cppdbg",
       "request": "launch",
       "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}/build/ZoomyTrace/ZoomyTrace",
-      "logging": {
-        "moduleLoad": false,
-        "trace": true
-      },
-      "preLaunchTask": "build_all",
-    },
-    {
-      "name": "logicdump",
-      "type": "cppdbg",
-      "request": "launch",
-      "cwd": "${workspaceFolder}",
-      "program": "${workspaceFolder}/build/ZoomyTrace/main",
+      "program": "${workspaceFolder}/build/ZoomyTrace/zoomytrace",
       "logging": {
         "moduleLoad": false,
         "trace": true

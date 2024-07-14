@@ -1,4 +1,6 @@
-#include "SDL2/include/SDL.h"
+//#include "SDL2/include/SDL.h"
+#include <SDL2/SDL.h>
+
 #include <stdio.h>
 #include <stdlib.h>
 #include <memory.h>
@@ -110,10 +112,6 @@ int main(int argc, char* argv[]) {
     //----------
     // Update wave tex
 
-    uint32_t* pixels;
-    int pitch;
-    SDL_LockTexture(texture, NULL, (void**) & pixels, &pitch);
-
     zoom   = view_control.view_smooth_snap.view_zoom();
     origin = view_control.view_smooth_snap.world_center().x + sample_count / 2.0;
 
@@ -140,6 +138,19 @@ int main(int argc, char* argv[]) {
     //----------
     // Render
 
+    time_a = timestamp();
+    uint32_t* pixels;
+    int pitch;
+    SDL_LockTexture(texture, NULL, (void**) & pixels, &pitch);
+    printf("pitch %d\n", pitch);
+
+    for (int x = 0; x < WINDOW_WIDTH; x++) {
+      double s = filtered[x];
+      s = (s < 0.0031308) ? 12.92 * s : (1.0 + 0.055) * pow(s, 1.0 / 2.4) - 0.055;
+      int v = (int)floor(s * 255.0);
+      filtered[x] = v;
+    }
+
     for (int y = 128 - 8; y < 128-4; y++) {
       for (int x = 0; x < WINDOW_WIDTH; x++) {
         pixels[x + y * (pitch / sizeof(uint32_t))] = 0x7F7F7FFF;
@@ -147,9 +158,7 @@ int main(int argc, char* argv[]) {
     }
     for (int y = 128; y < 128+64; y++) {
       for (int x = 0; x < WINDOW_WIDTH; x++) {
-        double s = filtered[x];
-        s = (s < 0.0031308) ? 12.92 * s : (1.0 + 0.055) * pow(s, 1.0 / 2.4) - 0.055;
-        int v = (int)floor(s * 255.0);
+        int v = (int)filtered[x];
         uint32_t color = (v << 24) | (v << 16) | (v << 8) | 0xFF;
         pixels[x + y * (pitch / sizeof(uint32_t))] = color;
       }
@@ -162,6 +171,8 @@ int main(int argc, char* argv[]) {
     }
 
     SDL_UnlockTexture(texture);
+    time_b = timestamp();
+    printf("render took %12.6f\n", time_b - time_a);
 
     //----------
     // Swap

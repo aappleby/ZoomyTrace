@@ -1,27 +1,30 @@
 #pragma once
 
+#include "symlinks/glm/glm/glm.hpp"
+using namespace glm;
+
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
-struct dvec2 {
-  double x;
-  double y;
-
-  void  operator += (dvec2 b) { x += b.x; y += b.y; }
-};
-
-inline dvec2 operator +  (dvec2 a,  dvec2 b)  { return { a.x + b.x, a.y + b.y }; }
-inline dvec2 operator +  (dvec2 a, double b)  { return { a.x + b,   a.y + b }; }
-inline dvec2 operator +  (double a, dvec2 b)  { return { a + b.x, a + b.y }; }
-
-inline dvec2 operator -  (dvec2 a,  dvec2 b)  { return { a.x - b.x, a.y - b.y }; }
-inline dvec2 operator -  (dvec2 a,  double b) { return { a.x - b,   a.y - b }; }
-
-inline dvec2 operator *  (dvec2 a,  double s) { return { a.x * s,   a.y * s }; }
-inline dvec2 operator *  (double a, dvec2 b)  { return { a * b.x, a * b.y }; }
-
-inline dvec2 operator /  (dvec2 a,  double s) { return { a.x / s,   a.y / s }; }
-
-inline bool  operator == (dvec2 a, dvec2 b)   { return a.x == b.x && a.y == b.y; }
+//struct dvec2 {
+//  double x;
+//  double y;
+//
+//  void  operator += (dvec2 b) { x += b.x; y += b.y; }
+//};
+//
+//inline dvec2 operator +  (dvec2 a,  dvec2 b)  { return { a.x + b.x, a.y + b.y }; }
+//inline dvec2 operator +  (dvec2 a, double b)  { return { a.x + b,   a.y + b }; }
+//inline dvec2 operator +  (double a, dvec2 b)  { return { a + b.x, a + b.y }; }
+//
+//inline dvec2 operator -  (dvec2 a,  dvec2 b)  { return { a.x - b.x, a.y - b.y }; }
+//inline dvec2 operator -  (dvec2 a,  double b) { return { a.x - b,   a.y - b }; }
+//
+//inline dvec2 operator *  (dvec2 a,  double s) { return { a.x * s,   a.y * s }; }
+//inline dvec2 operator *  (double a, dvec2 b)  { return { a * b.x, a * b.y }; }
+//
+//inline dvec2 operator /  (dvec2 a,  double s) { return { a.x / s,   a.y / s }; }
+//
+//inline bool  operator == (dvec2 a, dvec2 b)   { return a.x == b.x && a.y == b.y; }
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------
 

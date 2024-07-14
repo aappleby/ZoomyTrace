@@ -3,7 +3,7 @@
 #include <string>
 
 static char temp_buf[256];
-static std::string log_buf;
+std::string log_buf;
 
 //------------------------------------------------------------------------------
 
@@ -46,22 +46,6 @@ void err(const char* format, ...) {
   va_list args;
   va_start(args, format);
   log_color(0x008888FF, format, args);
-}
-
-//------------------------------------------------------------------------------
-
-void log_draw_imgui(const char* title)
-{
-    ImGui::Begin(title);
-    ImGui::BeginChild("scrolling", ImVec2(0, 0), ImGuiChildFlags_None, ImGuiWindowFlags_HorizontalScrollbar);
-    ImGui::PushStyleVar(ImGuiStyleVar_ItemSpacing, ImVec2(0, 0));
-    ImGui::TextUnformatted(log_buf.data(), log_buf.data() + log_buf.size());
-    ImGui::PopStyleVar();
-
-    if (ImGui::GetScrollY() >= ImGui::GetScrollMaxY())
-        ImGui::SetScrollHereY(1.0f);
-    ImGui::EndChild();
-    ImGui::End();
 }
 
 //------------------------------------------------------------------------------

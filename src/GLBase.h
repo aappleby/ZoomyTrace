@@ -1,5 +1,9 @@
 #pragma once
 
+struct SDL_Window;
+
+SDL_Window* create_gl_window(const char* name, int initial_screen_w, int initial_screen_h);
+
 void* init_gl(void* window);
 void  check_gl_error();
 

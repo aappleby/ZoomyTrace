@@ -54,7 +54,8 @@ Capture::Capture() {
   hdev = nullptr;
 
   // Allocate buffers & packets
-  ring_buffer = new uint8_t[ring_size];
+  //ring_buffer = new uint8_t[ring_size];
+  ring_buffer = (uint8_t*)aligned_alloc(chunk_size, ring_size);
   ring_buffer_len = ring_size;
 
   for (int i = 0; i < 16; i++) {
@@ -133,7 +134,8 @@ Capture::~Capture() {
   ctx = nullptr;
 
   // Free buffers & packets
-  delete [] ring_buffer;
+  //delete [] ring_buffer;
+  free(ring_buffer);
   ring_buffer = nullptr;
 
   while (!control_pool.empty()) {
@@ -196,8 +198,10 @@ int Capture::connect() {
 
   //----------------------------------------
 
-  CHECK(libusb_set_configuration(hdev, USB_CONFIGURATION));
-  CHECK(libusb_claim_interface(hdev, 0));
+  //CHECK(libusb_set_configuration(hdev, USB_CONFIGURATION));
+  //CHECK(libusb_claim_interface(hdev, 0));
+  libusb_set_configuration(hdev, USB_CONFIGURATION);
+  libusb_claim_interface(hdev, 0);
 
   //----------------------------------------
   // Upload firmware if needed
@@ -389,7 +393,7 @@ int Capture::thread_loop() {
   while (!host_to_cap.empty()) {
     auto msg = host_to_cap.get();
 
-    log("-> %-16s 0x%08x 0x%016x %ld", capcmd_to_cstr(msg.command), msg.result, msg.block, msg.length);
+    //log("-> %-16s 0x%08x 0x%016x %ld", capcmd_to_cstr(msg.command), msg.result, msg.block, msg.length);
 
 
     switch(msg.command) {
@@ -496,12 +500,13 @@ int Capture::get_revid() {
 //------------------------------------------------------------------------------
 
 int Capture::start_cap(int block_count) {
+  if (block_count == 0) return 0;
 
   assert(!capture_running);
   bulk_requested = block_count;
   bulk_submitted = 0;
-  bulk_pending = 0;
-  bulk_done = 0;
+  bulk_pending   = 0;
+  bulk_done      = 0;
 
   auto transfer = control_pool.front();
   control_pool.pop();
@@ -534,8 +539,8 @@ int Capture::start_cap(int block_count) {
   // We _must_ immediately enqueue _two_ bulk transfers after the cap starts or
   // the FX2's internal buffer will overflow.
 
-  CHECK(queue_chunk());
-  CHECK(queue_chunk());
+  if (block_count > 0) CHECK(queue_chunk());
+  if (block_count > 1) CHECK(queue_chunk());
 
   capture_running = true;
 
@@ -565,6 +570,7 @@ int Capture::queue_chunk() {
     ring,
     chunk_size,
     [](libusb_transfer* transfer) -> void {
+      //log("chunk received");
       Capture* cap = (Capture*)transfer->user_data;
       cap->ring_ready = (cap->ring_ready + cap->chunk_size) & cap->ring_mask;
       cap->bulk_pending--;
@@ -574,10 +580,12 @@ int Capture::queue_chunk() {
       cap->cap_to_host.put({XCMD_BLOCK, 0, transfer->buffer, cap->chunk_size});
 
       if (cap->bulk_submitted < cap->bulk_requested) {
+        //log("queueing next chunk");
         cap->queue_chunk();
       }
 
-      if (cap->bulk_done == cap->bulk_requested) {
+      if (cap->bulk_done >= cap->bulk_requested) {
+        //log("capture done");
         cap->capture_running = false;
         cap->cap_to_host.put({XCMD_STOP_CAP, cap->bulk_done, 0, 0});
 
