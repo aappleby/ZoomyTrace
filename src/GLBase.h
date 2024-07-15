@@ -1,4 +1,6 @@
 #pragma once
+#include <stdint.h>
+#include <stddef.h>
 
 struct SDL_Window;
 
@@ -23,6 +25,13 @@ void  update_ibo(int vbo, int size_bytes, const void* data);
 int   create_ubo();
 void  update_ubo(int ubo, int size_bytes, const void* data);
 void  bind_ubo  (int prog, const char* name, int index, int ubo);
+
+int   create_ssbo (size_t size_bytes);
+void  update_ssbo (int ssbo, const void* data, size_t size_bytes);
+void* map_ssbo    (int ssbo, int size_bytes);
+void  unmap_ssbo  (int ssbo);
+void  bind_ssbo   (int ssbo, int binding);
+void  unbind_ssbo ();
 
 int   create_texture_u32(int width, int height, const void* data, bool filter);
 void  update_texture_u32(int tex, int width, int height, const void* pix);

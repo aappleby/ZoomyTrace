@@ -6,50 +6,10 @@
 
 //------------------------------------------------------------------------------
 
-void gen_pattern(void* buf, size_t sample_count) {
-
-  printf("generating pattern\n");
-
-  auto time_a = timestamp();
-
-  uint32_t* bits = (uint32_t*)buf;
-
-  uint32_t x = 1;
-  for (size_t i = 0; i < sample_count; i++) {
-    size_t t = i;
-    t = t*((t>>9|t>>13)&25&t>>6);
-    //t *= 0x123;
-    //t ^= t >> 27;
-    t = __builtin_parity(t);
-    bits[(i >> 5)] |= (t << (i & 31));
-  }
-
-  /*
-  for (size_t i = 0; i < sample_count; i++) {
-    double t = double(i) / double(sample_count);
-
-    t = my_fsin(t * 100) * t * 0.5 + 0.5;
-    t *= double(0xFFFFFFFF);
-    int s = int(rng() <= t);
-
-    //if ((i % 17327797) < 4537841) {
-    //  s = 0;
-    //}
-
-    bits[(i >> 5)] |= (s << (i & 31));
-  }
-  */
-
-  printf("generating pattern done in %12.8f sec\n", timestamp() - time_a);
-}
-
-//----------
-
-
-
-
 //#pragma GCC optimize("O0")
-void BitBuf::update_table(double bar_min, double bar_max, double view_min, double view_max, double* filtered, int window_width) {
+void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max, double view_min, double view_max, double* filtered, int window_width) {
+
+  uint8_t* bits = blob.bits;
 
   const uint64_t mip0_shift =  0;
   const uint64_t mip1_shift =  7;
@@ -119,7 +79,7 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
 
     // Both endpoints are inside the same sample.
     if ((sample_imin >> 7) == (sample_imax >> 7)) {
-      filtered[x] = get_bit(bits, sample_imin >> 7);
+      filtered[x] = blob.get_bit(channel, sample_imin >> 7);
       mip0_hit++;
       continue;
     }
@@ -130,7 +90,7 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
     // Add the contribution from the fractional portion of the first sample.
     if (sample_imin & 0x7F) {
       double head_fract = 128 - (sample_imin & 0x7F);
-      total += head_fract * get_bit(bits, sample_imin >> 7);
+      total += head_fract * blob.get_bit(channel, sample_imin >> 7);
       sample_imin = (sample_imin + 0x7F) & ~0x7F;
       mip0_hit++;
     }
@@ -138,7 +98,7 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
     // Add the contribution from the fractional portion of the last sample.
     if (sample_imax & 0x7F) {
       double tail_fract = sample_imax & 0x7F;
-      total += tail_fract * get_bit(bits, sample_imax >> 7);
+      total += tail_fract * blob.get_bit(channel, sample_imax >> 7);
       sample_imax = sample_imax & ~0x7F;
       mip0_hit++;
     }
@@ -159,13 +119,13 @@ void BitBuf::update_table(double bar_min, double bar_max, double view_min, doubl
 
     if ((sample_imin & mip0_mask) || (sample_imax & mip0_mask)) {
       while ((sample_imin & mip0_mask) && (sample_imin < sample_imax)) {
-        total += get_bit(bits, sample_imin >> mip0_shift) * mip0_weight;
+        total += blob.get_bit(channel, sample_imin >> mip0_shift) * mip0_weight;
         sample_imin += mip0_size;
         mip0_hit++;
       }
 
       while ((sample_imax & mip0_mask) && (sample_imin < sample_imax)) {
-        total += get_bit(bits, (sample_imax - 1) >> mip0_shift) * mip0_weight;
+        total += blob.get_bit(channel, (sample_imax - 1) >> mip0_shift) * mip0_weight;
         sample_imax -= mip0_size;
         mip0_hit++;
       }

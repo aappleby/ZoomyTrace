@@ -12,62 +12,88 @@ inline int get_bit(void* buf, size_t i) {
 
 void gen_pattern(void* buf, size_t sample_count);
 
-struct BitBuf {
+struct BitBlob {
+
+  int get_bit(size_t channel, size_t sample) {
+    assert(channel < channels);
+    size_t index = channel + (sample * stride);
+    assert((index / 8) < bits_len);
+    return (bits[index >> 3] >> (index & 7)) & 1;
+  }
+
+  size_t   channels;
+  size_t   sample_count;
+  size_t   stride;
+  size_t   bits_len;
+  uint8_t* bits;
+};
+
+struct BitMips {
   size_t sample_count;
 
-  size_t bits_len;
   size_t mip1_len;
   size_t mip2_len;
   size_t mip3_len;
   size_t mip4_len;
 
-  uint8_t*  bits = nullptr;
   uint8_t*  mip1 = nullptr;
   uint8_t*  mip2 = nullptr;
   uint8_t*  mip3 = nullptr;
   uint8_t*  mip4 = nullptr;
 
-  ~BitBuf() {
-    delete [] bits;
+  ~BitMips() {
+    //delete [] bits;
     delete [] mip1;
     delete [] mip2;
     delete [] mip3;
     delete [] mip4;
   }
 
-  void update_table(double bar_min, double bar_max, double view_min, double view_max, double* filtered, int window_width);
+  void render(BitBlob& bits, int channel, double bar_min, double bar_max, double view_min, double view_max, double* filtered, int window_width);
 
-  void init(size_t sample_count) {
-    assert(!(sample_count & 127));
-    this->sample_count = sample_count;
+  void init() {
+    sample_count = 0;
+    mip1_len = 0;
+    mip2_len = 0;
+    mip3_len = 0;
+    mip4_len = 0;
 
-    bits_len = sample_count / 8;
-    bits = new uint8_t[bits_len];
+    size_t max_sample_count = (1 << 28);
 
-    mip1_len = (sample_count + 127) / 128;
-    mip1 = new uint8_t[mip1_len];
+    size_t max_mip1_len = (max_sample_count + 127) / 128;
+    mip1 = new uint8_t[max_mip1_len];
 
-    mip2_len = (mip1_len + 127) / 128;
-    mip2 = new uint8_t[mip2_len];
+    size_t max_mip2_len = (max_mip1_len + 127) / 128;
+    mip2 = new uint8_t[max_mip2_len];
 
-    mip3_len = (mip2_len + 127) / 128;
-    mip3 = new uint8_t[mip3_len];
+    size_t max_mip3_len = (max_mip2_len + 127) / 128;
+    mip3 = new uint8_t[max_mip3_len];
 
-    mip4_len = (mip3_len + 127) / 128;
-    mip4 = new uint8_t[mip4_len];
+    size_t max_mip4_len = (max_mip3_len + 127) / 128;
+    mip4 = new uint8_t[max_mip4_len];
   }
 
   //----------------------------------------
 
+  /*
   void upload(void* buf, uint32_t a, uint32_t b) {
     assert(!(a & 31));
     assert(!(b & 31));
     memcpy(&bits[a/8], buf, (b-a)/8);
   }
+  */
 
-  void update() {
+  void update_mips(BitBlob& blob, int channel) {
+
+    auto bits = blob.bits;
+    this->sample_count = blob.sample_count;
+    size_t bits_len = sample_count / 8;
 
     // round totals *up* so that we don't mark a sparse mip as completely empty.
+    mip1_len = (sample_count + 127) / 128;
+    mip2_len = (mip1_len + 127) / 128;
+    mip3_len = (mip2_len + 127) / 128;
+    mip4_len = (mip3_len + 127) / 128;
 
     //----------
     // update mip1
@@ -77,13 +103,13 @@ struct BitBuf {
       for (size_t i = 0; i < mip1_len; i++) {
 
         int total = 0;
-        for (size_t j = 0; j < 16; j++) {
-          total += __builtin_popcount(bits[cursor++]);
-          if (cursor == bits_len) break;
+        for (size_t j = 0; j < 128; j++) {
+          total += blob.get_bit(channel, i * 128 + j);
+          if (cursor == sample_count) break;
         }
 
         mip1[i] = total;
-        if (cursor == bits_len) break;
+        if (cursor == sample_count) break;
       }
     }
 
@@ -141,14 +167,15 @@ struct BitBuf {
   void dump() {
     assert(!(sample_count & 127));
 
-    printf("samples  %ld\n", sample_count);
-    printf("bits_len %ld\n", bits_len);
+    //printf("samples  %ld\n", sample_count);
+    //printf("bits_len %ld\n", bits_len);
     printf("mip1_len %ld\n", mip1_len);
     printf("mip2_len %ld\n", mip2_len);
     printf("mip3_len %ld\n", mip3_len);
     printf("mip4_len %ld\n", mip4_len);
     printf("\n");
 
+    /*
     {
       printf("bits:\n");
       size_t rows = (sample_count + 127) / 128;
@@ -164,6 +191,7 @@ struct BitBuf {
         if (cursor == sample_count) break;
       }
     }
+    */
 
     {
       printf("mip1:\n");

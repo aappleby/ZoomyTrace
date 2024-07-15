@@ -5,6 +5,8 @@
 #include "symlinks/imgui/imgui.h"
 #include <SDL2/SDL.h>
 
+double timestamp();
+
 //-----------------------------------------------------------------------------
 
 const GLchar* imgui_glsl = R"(
@@ -63,41 +65,23 @@ void Gui::init() {
 
   io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;
 
-  //io.KeyMap[ImGuiKey_Tab] = SDL_SCANCODE_TAB;
-  //io.KeyMap[ImGuiKey_LeftArrow] = SDL_SCANCODE_LEFT;
-  //io.KeyMap[ImGuiKey_RightArrow] = SDL_SCANCODE_RIGHT;
-  //io.KeyMap[ImGuiKey_UpArrow] = SDL_SCANCODE_UP;
-  //io.KeyMap[ImGuiKey_DownArrow] = SDL_SCANCODE_DOWN;
-  //io.KeyMap[ImGuiKey_PageUp] = SDL_SCANCODE_PAGEUP;
-  //io.KeyMap[ImGuiKey_PageDown] = SDL_SCANCODE_PAGEDOWN;
-  //io.KeyMap[ImGuiKey_Home] = SDL_SCANCODE_HOME;
-  //io.KeyMap[ImGuiKey_End] = SDL_SCANCODE_END;
-  //io.KeyMap[ImGuiKey_Insert] = SDL_SCANCODE_INSERT;
-  //io.KeyMap[ImGuiKey_Delete] = SDL_SCANCODE_DELETE;
-  //io.KeyMap[ImGuiKey_Backspace] = SDL_SCANCODE_BACKSPACE;
-  //io.KeyMap[ImGuiKey_Space] = SDL_SCANCODE_SPACE;
-  //io.KeyMap[ImGuiKey_Enter] = SDL_SCANCODE_RETURN;
-  //io.KeyMap[ImGuiKey_Escape] = SDL_SCANCODE_ESCAPE;
+  imgui_prog = create_shader("imgui_glsl", imgui_glsl);
 
-  {
-    imgui_prog = create_shader("imgui_glsl", imgui_glsl);
+  unsigned char* pixels;
+  int font_width, font_height;
+  io.Fonts->GetTexDataAsAlpha8(&pixels, &font_width, &font_height);
+  imgui_tex = create_texture_u8(font_width, font_height, pixels, false);
 
-    unsigned char* pixels;
-    int font_width, font_height;
-    io.Fonts->GetTexDataAsAlpha8(&pixels, &font_width, &font_height);
-    imgui_tex = create_texture_u8(font_width, font_height, pixels, false);
+  imgui_vao = create_vao();
+  imgui_vbo = create_vbo();
+  imgui_ibo = create_ibo();
 
-    imgui_vao = create_vao();
-    imgui_vbo = create_vbo();
-    imgui_ibo = create_ibo();
-
-    glEnableVertexAttribArray(0);
-    glEnableVertexAttribArray(1);
-    glEnableVertexAttribArray(2);
-    glVertexAttribPointer(0, 2, GL_FLOAT,         GL_FALSE, 20, (void*)0);
-    glVertexAttribPointer(1, 2, GL_FLOAT,         GL_FALSE, 20, (void*)8);
-    glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE,  20, (void*)16);
-  }
+  glEnableVertexAttribArray(0);
+  glEnableVertexAttribArray(1);
+  glEnableVertexAttribArray(2);
+  glVertexAttribPointer(0, 2, GL_FLOAT,         GL_FALSE, 20, (void*)0);
+  glVertexAttribPointer(1, 2, GL_FLOAT,         GL_FALSE, 20, (void*)8);
+  glVertexAttribPointer(2, 4, GL_UNSIGNED_BYTE, GL_TRUE,  20, (void*)16);
 }
 
 //----------------------------------------
@@ -125,8 +109,10 @@ void Gui::render_gl(SDL_Window* window) {
     for (int n = 0; n < draw_data->CmdListsCount; n++) {
       const ImDrawList* l = draw_data->CmdLists[n];
 
-      glBufferData(GL_ARRAY_BUFFER, l->VtxBuffer.Size * sizeof(ImDrawVert), l->VtxBuffer.Data, GL_STREAM_DRAW);
-      glBufferData(GL_ELEMENT_ARRAY_BUFFER, l->IdxBuffer.Size * sizeof(ImDrawIdx), l->IdxBuffer.Data, GL_STREAM_DRAW);
+      auto time_a = timestamp();
+      glBufferData(GL_ARRAY_BUFFER,         l->VtxBuffer.Size * sizeof(ImDrawVert), l->VtxBuffer.Data, GL_STREAM_DRAW);
+      auto time_b = timestamp();
+      glBufferData(GL_ELEMENT_ARRAY_BUFFER, l->IdxBuffer.Size * sizeof(ImDrawIdx),  l->IdxBuffer.Data, GL_STREAM_DRAW);
 
       for (int i = 0; i < l->CmdBuffer.Size; i++) {
         const ImDrawCmd* c = &l->CmdBuffer[i];
@@ -134,7 +120,6 @@ void Gui::render_gl(SDL_Window* window) {
                   screen_h - int(c->ClipRect.w),
                   int(c->ClipRect.z - c->ClipRect.x),
                   int(c->ClipRect.w - c->ClipRect.y));
-
         glDrawElements(GL_TRIANGLES, c->ElemCount, GL_UNSIGNED_SHORT,
                         reinterpret_cast<void*>(intptr_t(c->IdxOffset * 2)));
       }

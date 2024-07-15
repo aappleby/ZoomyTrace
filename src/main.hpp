@@ -2,6 +2,7 @@
 #include "gui.hpp"
 #include "ViewController.hpp"
 #include "Blitter.hpp"
+#include "TracePainter.hpp"
 #include <SDL2/SDL.h>
 
 struct Capture;
@@ -25,7 +26,7 @@ public:
   double delta_time;
   ViewController vcon;
   Blitter blit;
-  int test_tex;
+  TracePainter trace_painter;
   int screen_w = 0;
   int screen_h = 0;
   int mouse_x = 0;

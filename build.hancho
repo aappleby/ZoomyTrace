@@ -53,6 +53,23 @@ main = link(
   out_bin = "zoomytrace",
 )
 
+zoomy = link(
+  in_objs = [
+    zoomy_o,
+    capture_o,
+    glbase_o,
+    gui_o,
+    glad_o,
+    imgui_o,
+    firmware_o,
+    log_o,
+    bitchunk_o,
+    blitter_o,
+    view_o,
+    trace_painter_o,
+  ],
+  out_bin = "zoomytrace2",
+)
 
 
 #hancho.Task(

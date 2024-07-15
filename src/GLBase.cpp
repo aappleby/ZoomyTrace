@@ -274,13 +274,25 @@ int create_ssbo(size_t size_bytes) {
   glGenBuffers(1, &ssbo);
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
   glBufferStorage(GL_SHADER_STORAGE_BUFFER, size_bytes, nullptr,
-    GL_MAP_READ_BIT | GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_DYNAMIC_STORAGE_BIT);
+    GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT | GL_DYNAMIC_STORAGE_BIT);
   return (int)ssbo;
 }
 
 void update_ssbo(int ssbo, const void* data, size_t size_bytes) {
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
   glBufferSubData(GL_SHADER_STORAGE_BUFFER, 0, size_bytes, data);
+}
+
+void* map_ssbo(int ssbo, int size_bytes) {
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+  void* result = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, size_bytes,
+    GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+  return result;
+}
+
+void unmap_ssbo(int ssbo) {
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
+  glUnmapBuffer(GL_SHADER_STORAGE_BUFFER);
 }
 
 void bind_ssbo(int ssbo, int binding) {

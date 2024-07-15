@@ -54,9 +54,8 @@ Capture::Capture() {
   hdev = nullptr;
 
   // Allocate buffers & packets
-  //ring_buffer = new uint8_t[ring_size];
-  ring_buffer = (uint8_t*)aligned_alloc(chunk_size, ring_size);
-  ring_buffer_len = ring_size;
+  //ring_buffer = (uint8_t*)aligned_alloc(chunk_size, ring_size);
+  //ring_buffer_len = ring_size;
 
   for (int i = 0; i < 16; i++) {
     auto t = libusb_alloc_transfer(0);
@@ -135,7 +134,7 @@ Capture::~Capture() {
 
   // Free buffers & packets
   //delete [] ring_buffer;
-  free(ring_buffer);
+  //free(ring_buffer);
   ring_buffer = nullptr;
 
   while (!control_pool.empty()) {

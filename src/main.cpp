@@ -29,14 +29,17 @@ void Main::init() {
 
   blit.init();
 
+  trace_painter.init();
+
+  cap->ring_buffer = (uint8_t*)trace_painter.mapped_buffer;
+  cap->ring_buffer_len = 8*1024*1024;
+
   vcon.init({initial_screen_w, initial_screen_h});
 
   //----------------------------------------
   // Initialize ImGui and ImGui renderer
 
   gui.init();
-
-  test_tex = create_texture_u32(1920, 1, nullptr, false);
 
   old_now = timestamp();
   new_now = timestamp();
@@ -113,9 +116,16 @@ void Main::update() {
       quit = true;
     }
 
-    if (event.type == SDL_KEYDOWN && !imgui_io.WantCaptureKeyboard && !imgui_io.WantTextInput) {
-      if ((event.key.keysym.sym == SDLK_ESCAPE) && (event.key.keysym.mod & KMOD_LSHIFT)) {
-        quit = true;
+    // !imgui_io.WantCaptureKeyboard && !imgui_io.WantTextInput
+
+    if (event.type == SDL_KEYDOWN) {
+      if (event.key.keysym.sym == SDLK_ESCAPE) {
+        if (event.key.keysym.mod & KMOD_LSHIFT) {
+          quit = true;
+        } else {
+          vcon.view_target      = Viewport::screenspace({screen_w, screen_h});
+          vcon.view_target_snap = Viewport::screenspace({screen_w, screen_h});
+        }
       }
     }
 
@@ -147,6 +157,7 @@ void Main::update() {
 
   update_imgui();
 
+  /*
   uint32_t pixels[1920];
   for (int i = 0; i < 1920; i++) {
     uint8_t t = 0;
@@ -158,8 +169,7 @@ void Main::update() {
     }
     pixels[i] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
   }
-
-  update_texture_u32(test_tex, 1920, 1, pixels);
+  */
 }
 
 //------------------------------------------------------------------------------
@@ -219,7 +229,7 @@ void Main::update_imgui() {
     }
 
     if (ImGui::Button("start_cap", {100,25})) {
-      cap->post_async({XCMD_START_CAP, 256, 0, 0});
+      cap->post_async({XCMD_START_CAP, 1024, 0, 0});
     }
 
     if (ImGui::Button("stop_cap", {100,25})) {
@@ -253,8 +263,16 @@ void Main::render() {
   glViewport(0, 0, screen_w, screen_h);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
+  /*
+  for (int i = 0; i < 1024; i++) {
+    auto t = rng() & 0xFF;
+    trace_painter.mapped_buffer[i] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
+  }
+  */
+
+
   dvec2 screen_size = { (double)screen_w, (double)screen_h };
-  blit.blit(vcon.view_smooth_snap, screen_size, test_tex, 0, 100, 1920, 64);
+  trace_painter.blit(vcon.view_smooth_snap, screen_size, 0, 100, 1920, 64);
 
   gui.render_gl(window);
 
@@ -266,6 +284,7 @@ void Main::render() {
 void Main::exit() {
   cap->stop_thread();
   delete cap;
+  trace_painter.exit();
   log("ZoomyTrace exit");
 }
 
