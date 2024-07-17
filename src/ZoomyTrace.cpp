@@ -9,7 +9,7 @@
 #include <math.h>
 
 #include "log.hpp"
-#include "BitChunk.hpp"
+#include "BitMips.hpp"
 
 #ifdef _MSC_VER
 #  include <intrin.h>
@@ -35,27 +35,19 @@ void gen_pattern(void* buf, size_t sample_count) {
 
   uint32_t x = 1;
   for (size_t i = 0; i < sample_count; i++) {
-    bits[i] = 0x00;
 
-    //if (i & 1) bits[i] |= 1;
-    //if (i & 2) bits[i] |= 2;
-    //if (i & 4) bits[i] |= 4;
-    //if (i & 8) bits[i] |= 8;
-    //if (i & 16) bits[i] |= 16;
-    //if (i & 32) bits[i] |= 32;
-    //if (i & 64) bits[i] |= 64;
-    //if (i & 128) bits[i] |= 128;
+    //bits[i] = i;
+
+    //size_t t = i;
+    //t = t*((t>>9|t>>13)&25&t>>6);
+    //bits[i] = t;
 
     size_t t = i;
-    //t = t*((t>>9|t>>13)&25&t>>6);
-
-    t *= 0x1234567;
-    t ^= t >> 32;
-    t *= 0x1234567;
-    t ^= t >> 32;
-
+    t *= 0x23456789;
+    t ^= (t >> 45);
+    t *= 0x23456789;
+    t ^= (t >> 45);
     bits[i] = t;
-    //bits[(i >> 5)] |= (__builtin_parity(t) << (i & 31));
   }
 
   printf("generating pattern done in %12.8f sec\n", timestamp() - time_a);
@@ -71,21 +63,21 @@ int main(int argc, char* argv[]) {
   //size_t bits_len = sample_count / 8;
   //uint8_t* bits = new uint8_t[bits_len];
 
+  //BitBlob blob(1024ull * 1024ull, 8, 8);
+
   BitBlob blob;
   blob.channels = 8;
-  blob.sample_count = 256ull * 1024ull * 1024ull;
-  //blob.sample_count = 1024ull * 1024ull;
+  blob.sample_count = 1024ull * 1024ull;
   blob.stride = 8;
 
   size_t max_index = blob.sample_count * blob.stride;
   blob.bits_len = (max_index + 7) / 8;
   blob.bits = new uint8_t[blob.bits_len];
+
   gen_pattern(blob.bits, blob.sample_count);
 
   BitMips mips[8];
-
   for (int i = 0; i < 8; i++) {
-    mips[i].init();
     mips[i].update_mips(blob, 1);
   }
 
@@ -107,7 +99,7 @@ int main(int argc, char* argv[]) {
   double old_now = timestamp();
   double new_now = timestamp();
 
-  double zoom = 0.0;
+  dvec2 zoom = {0,0};
   double origin = blob.sample_count / 2.0;
 
   ViewController view_control;
@@ -121,7 +113,7 @@ int main(int argc, char* argv[]) {
   //----------------------------------------
   // Main loop
 
-  zoom = 6.000000;
+  zoom = {6.000000, 6.000000};
   origin = 8427316.578125;
 
   while (!quit) {
@@ -170,9 +162,9 @@ int main(int argc, char* argv[]) {
     zoom   = view_control.view_smooth_snap.view_zoom();
     origin = view_control.view_smooth_snap.world_center().x + blob.sample_count / 2.0;
 
-    origin += sin(new_now * 1.0) * 1.0 * exp2(-zoom);
+    origin += sin(new_now * 1.0) * 1.0 * exp2(-zoom.x);
 
-    double pixels_per_sample = pow(2, zoom);
+    double pixels_per_sample = pow(2, zoom.x);
     double samples_per_pixel = 1.0 / pixels_per_sample;
 
     double bar_min = 0.0;

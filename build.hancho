@@ -20,65 +20,37 @@ link = hancho.Command(
   libs    = "-lusb-1.0 -lstdc++ -lSDL2 -lm",
 )
 
-imgui_o    = [compile(in_src = f) for f in glob.glob("symlinks/imgui/*.cpp")]
-glad_o     = compile(in_src = "symlinks/glad/glad.c")
-main_o     = compile(in_src = "src/main.cpp")
-capture_o  = compile(in_src = "src/capture.cpp")
-glbase_o   = compile(in_src = "src/GLBase.cpp")
-gui_o      = compile(in_src = "src/gui.cpp")
-firmware_o = compile(in_src = "src/firmware.cpp")
-log_o      = compile(in_src = "src/log.cpp")
-zoomy_o    = compile(in_src = "src/ZoomyTrace.cpp")
-view_o     = compile(in_src = "src/ViewController.cpp")
-bitchunk_o = compile(in_src = "src/BitChunk.cpp")
-blitter_o  = compile(in_src = "src/Blitter.cpp")
+imgui_o = [compile(in_src = f) for f in glob.glob("symlinks/imgui/*.cpp")]
 
-trace_painter_o = compile(in_src= "src/TracePainter.cpp")
+objs = [
+  compile(in_src = "src/BitMips.cpp"),
+  compile(in_src = "src/Blitter.cpp"),
+  compile(in_src = "src/capture.cpp"),
+  compile(in_src = "src/firmware.cpp"),
+  compile(in_src = "src/GLBase.cpp"),
+  compile(in_src = "src/gui.cpp"),
+  compile(in_src = "src/log.cpp"),
+  compile(in_src = "src/RingBuffer.cpp"),
+  compile(in_src = "src/ThreadQueue.cpp"),
+  compile(in_src = "src/ViewController.cpp"),
+  compile(in_src = "symlinks/glad/glad.c"),
+  compile(in_src = "src/TracePainter.cpp"),
+]
 
 main = link(
   in_objs = [
-    main_o,
-    capture_o,
-    glbase_o,
-    gui_o,
-    glad_o,
+    compile(in_src = "src/main.cpp"),
     imgui_o,
-    firmware_o,
-    log_o,
-    bitchunk_o,
-    blitter_o,
-    view_o,
-    trace_painter_o,
+    objs
   ],
   out_bin = "zoomytrace",
 )
 
 zoomy = link(
   in_objs = [
-    zoomy_o,
-    capture_o,
-    glbase_o,
-    gui_o,
-    glad_o,
+    compile(in_src = "src/ZoomyTrace.cpp"),
     imgui_o,
-    firmware_o,
-    log_o,
-    bitchunk_o,
-    blitter_o,
-    view_o,
-    trace_painter_o,
+    objs
   ],
   out_bin = "zoomytrace2",
 )
-
-
-#hancho.Task(
-#  command = [
-#    "mkdir -p build",
-#    "g++ -Wall -Werror {opt} -g -MMD -c ViewController.cpp -o build/ViewController.o",
-#    "g++ -Wall -Werror {opt} -g -MMD -c ZoomyTrace.cpp -o build/ZoomyTrace.o",
-#    "g++ -Wall -Werror {opt} -g -MMD build/ViewController.o build/ZoomyTrace.o -o build/ZoomyTrace -lm -lSDL2",
-#  ],
-#  #opt = "-O3",
-#  opt = "-O0",
-#)

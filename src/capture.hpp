@@ -1,13 +1,12 @@
 #pragma once
 #include <stdint.h>
 #include <atomic>
-#include <mutex>
-#include <queue>
 #include <thread>
 #include <libusb-1.0/libusb.h>
-#include <sys/eventfd.h>
 #include <assert.h>
 #include "log.hpp"
+#include "RingBuffer.hpp"
+#include "ThreadQueue.hpp"
 
 //------------------------------------------------------------------------------
 
@@ -32,49 +31,6 @@ constexpr int DEFAULT_TIMEOUT = 100;
 constexpr int BULK_ENDPOINT = 2;
 
 constexpr uint16_t EZUSB_HALT_REG_ADDR = 0xe600;
-
-//------------------------------------------------------------------------------
-
-template<typename T>
-struct ThreadQueue {
-
-  std::queue<T> queue_;
-  std::mutex mut_;
-  int fd = 0;
-
-  ThreadQueue() {
-    fd = eventfd(0, EFD_SEMAPHORE);
-  }
-
-  void put(T buf) {
-    {
-      std::lock_guard<std::mutex> lock(mut_);
-      queue_.push(std::move(buf));
-    }
-    uint64_t inc = 1;
-    auto _ = write(fd, &inc, 8);
-  }
-
-  T get() {
-    uint64_t inc = 0;
-    auto _ = read(fd, &inc, 8);
-    assert(inc == 1);
-    std::lock_guard<std::mutex> lock(mut_);
-    auto buf = std::move(queue_.front());
-    queue_.pop();
-    return buf;
-  }
-
-  [[nodiscard]] bool empty() {
-    std::lock_guard<std::mutex> lock(mut_);
-    return queue_.empty();
-  }
-
-  [[nodiscard]] size_t count() {
-    std::lock_guard<std::mutex> lock(mut_);
-    return queue_.size();
-  }
-};
 
 //------------------------------------------------------------------------------
 
@@ -172,18 +128,9 @@ public:
 
   int epoll_fd = -1;
 
-  // DMA ring buffer size seems to be limited to 8 megs (128 chunks)
-  int chunk_size  = 65536;
-  int chunk_count = 128;
-  int ring_size   = 65536 * 128;
-  int ring_mask   = (65536 * 128) - 1;
+  static constexpr int chunk_size = 65536;
 
-  std::atomic_int ring_read  = 0;
-  std::atomic_int ring_ready = 0;
-  std::atomic_int ring_write = 0;
-
-  uint8_t* ring_buffer = nullptr;
-  int      ring_buffer_len = 0;
+  RingBuffer* ring;
 };
 
 extern Capture& cap;

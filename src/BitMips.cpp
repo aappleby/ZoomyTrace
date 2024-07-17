@@ -1,8 +1,122 @@
-#include "BitChunk.hpp"
+#include "BitMips.hpp"
 
 #include "log.hpp"
 #include <stdio.h>
 #include <assert.h>
+
+//------------------------------------------------------------------------------
+
+BitMips::BitMips() {
+  sample_count = 0;
+  mip1_len = 0;
+  mip2_len = 0;
+  mip3_len = 0;
+  mip4_len = 0;
+
+  size_t max_sample_count = (1 << 28);
+
+  size_t max_mip1_len = (max_sample_count + 127) / 128;
+  mip1 = new uint8_t[max_mip1_len];
+
+  size_t max_mip2_len = (max_mip1_len + 127) / 128;
+  mip2 = new uint8_t[max_mip2_len];
+
+  size_t max_mip3_len = (max_mip2_len + 127) / 128;
+  mip3 = new uint8_t[max_mip3_len];
+
+  size_t max_mip4_len = (max_mip3_len + 127) / 128;
+  mip4 = new uint8_t[max_mip4_len];
+}
+
+BitMips::~BitMips() {
+  //delete [] bits;
+  delete [] mip1;
+  delete [] mip2;
+  delete [] mip3;
+  delete [] mip4;
+}
+
+//------------------------------------------------------------------------------
+
+void BitMips::update_mips(BitBlob& blob, int channel) {
+
+  auto bits = blob.bits;
+  this->sample_count = blob.sample_count;
+  size_t bits_len = sample_count / 8;
+
+  // round totals *up* so that we don't mark a sparse mip as completely empty.
+  mip1_len = (sample_count + 127) / 128;
+  mip2_len = (mip1_len + 127) / 128;
+  mip3_len = (mip2_len + 127) / 128;
+  mip4_len = (mip3_len + 127) / 128;
+
+  //----------
+  // update mip1
+
+  {
+    size_t cursor = 0;
+    for (size_t i = 0; i < mip1_len; i++) {
+
+      int total = 0;
+      for (size_t j = 0; j < 128; j++) {
+        total += blob.get_bit(channel, i * 128 + j);
+        if (cursor == sample_count) break;
+      }
+
+      mip1[i] = total;
+      if (cursor == sample_count) break;
+    }
+  }
+
+  //----------
+  // update mip2
+
+  {
+    size_t cursor = 0;
+    for (size_t i = 0; i < mip2_len; i++) {
+      int total = 0;
+      for (size_t j = 0; j < 128; j++) {
+        total += mip1[cursor++];
+        if (cursor == mip1_len) break;
+      }
+      mip2[i] = (total + 127) >> 7;
+      if (cursor == mip1_len) break;
+    }
+  }
+
+  //----------
+  // update mip3
+
+  {
+    size_t cursor = 0;
+    for (size_t i = 0; i < mip3_len; i++) {
+      int total = 0;
+      for (size_t j = 0; j < 128; j++) {
+        total += mip2[cursor++];
+        if (cursor == mip2_len) break;
+      }
+      mip3[i] = (total + 127) >> 7;
+      if (cursor == mip2_len) break;
+    }
+  }
+
+  //----------
+  // update mip4
+
+  {
+    size_t cursor = 0;
+    for (size_t i = 0; i < mip4_len; i++) {
+      int total = 0;
+      for (int j = 0; j < 128; j++) {
+        total += mip3[cursor++];
+        if (cursor == mip3_len) break;
+      }
+      mip4[i] = (total + 127) >> 7;
+      if (cursor == mip3_len) break;
+    }
+  }
+}
+
 
 //------------------------------------------------------------------------------
 
@@ -229,9 +343,93 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
     filtered[x] = double(total) / double(sample_ilen);
   }
 
-  printf("mip0_hit %d\n", mip0_hit);
-  printf("mip1_hit %d\n", mip1_hit);
-  printf("mip2_hit %d\n", mip2_hit);
-  printf("mip3_hit %d\n", mip3_hit);
-  printf("mip4_hit %d\n", mip4_hit);
+  //printf("mip0_hit %d\n", mip0_hit);
+  //printf("mip1_hit %d\n", mip1_hit);
+  //printf("mip2_hit %d\n", mip2_hit);
+  //printf("mip3_hit %d\n", mip3_hit);
+  //printf("mip4_hit %d\n", mip4_hit);
 }
+
+//------------------------------------------------------------------------------
+
+void BitMips::dump() {
+  assert(!(sample_count & 127));
+
+  //printf("samples  %ld\n", sample_count);
+  //printf("bits_len %ld\n", bits_len);
+  printf("mip1_len %ld\n", mip1_len);
+  printf("mip2_len %ld\n", mip2_len);
+  printf("mip3_len %ld\n", mip3_len);
+  printf("mip4_len %ld\n", mip4_len);
+  printf("\n");
+
+  {
+    printf("mip1:\n");
+    size_t rows = (mip1_len + 63) / 64;
+    size_t cols = 64;
+    size_t cursor = 0;
+
+    for (size_t y = 0; y < rows; y++) {
+      for (size_t x = 0; x < cols; x++) {
+        printf("%02x ", mip1[cursor++]);
+        if (cursor == mip1_len) break;
+      }
+      putc('\n', stdout);
+      if (cursor == mip1_len) break;
+    }
+    printf("\n");
+  }
+
+  {
+    printf("mip2:\n");
+    size_t rows = (mip2_len + 63) / 64;
+    size_t cols = 64;
+    size_t cursor = 0;
+
+    for (size_t y = 0; y < rows; y++) {
+      for (size_t x = 0; x < cols; x++) {
+        printf("%02x ", mip2[cursor++]);
+        if (cursor == mip2_len) break;
+      }
+      putc('\n', stdout);
+      if (cursor == mip2_len) break;
+    }
+    printf("\n");
+  }
+
+  {
+    printf("mip3:\n");
+    size_t rows = (mip3_len + 63) / 64;
+    size_t cols = 64;
+    size_t cursor = 0;
+
+    for (size_t y = 0; y < rows; y++) {
+      for (size_t x = 0; x < cols; x++) {
+        printf("%02x ", mip3[cursor++]);
+        if (cursor == mip3_len) break;
+      }
+      putc('\n', stdout);
+      if (cursor == mip3_len) break;
+    }
+    printf("\n");
+  }
+
+  {
+    printf("mip4:\n");
+    size_t rows = (mip4_len + 63) / 64;
+    size_t cols = 64;
+    size_t cursor = 0;
+
+    for (size_t y = 0; y < rows; y++) {
+      for (size_t x = 0; x < cols; x++) {
+        printf("%02x ", mip4[cursor++]);
+        if (cursor == mip4_len) break;
+      }
+      putc('\n', stdout);
+      if (cursor == mip4_len) break;
+    }
+    printf("\n");
+  }
+}
+
+//------------------------------------------------------------------------------

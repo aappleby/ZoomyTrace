@@ -26,7 +26,8 @@ public:
   uint32_t trace_ssbo = 0;
   uint32_t trace_prog = 0;
 
-  uint32_t* mapped_buffer = nullptr;
+  uint8_t* mapped_buffer = nullptr;
+  size_t   mapped_len = 8*1024*1024;
 };
 
 //-----------------------------------------------------------------------------

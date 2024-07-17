@@ -3,10 +3,13 @@
 #include "ViewController.hpp"
 #include "Blitter.hpp"
 #include "TracePainter.hpp"
+#include "RingBuffer.hpp"
 #include <SDL2/SDL.h>
 
 struct Capture;
 struct SDL_Window;
+struct BitBlob;
+struct BitMips;
 
 class Main {
 public:
@@ -41,4 +44,8 @@ public:
   int key_count;
   SDL_DisplayMode display_mode;
   SDL_Event events[256];
+
+  BitBlob* blob;
+  BitMips* mips[8];
+  RingBuffer* ring;
 };

@@ -1,6 +1,7 @@
 #include "capture.hpp"
 
 #include <sys/epoll.h>
+#include "RingBuffer.hpp"
 
 #define USB_CONFIGURATION	1
 #define SALEAE_VID 0x0925
@@ -135,7 +136,7 @@ Capture::~Capture() {
   // Free buffers & packets
   //delete [] ring_buffer;
   //free(ring_buffer);
-  ring_buffer = nullptr;
+  ring = nullptr;
 
   while (!control_pool.empty()) {
     auto t = control_pool.front();
@@ -560,18 +561,20 @@ int Capture::queue_chunk() {
   auto transfer = bulk_pool.front();
   bulk_pool.pop();
 
-  auto ring = ring_buffer + ring_write;
+  auto ring_dst = ring->buffer + ring->cursor_write;
+  auto ring_mask = ring->buffer_len - 1;
 
   libusb_fill_bulk_transfer(
     transfer,
     hdev,
     BULK_ENDPOINT | LIBUSB_ENDPOINT_IN,
-    ring,
+    ring_dst,
     chunk_size,
     [](libusb_transfer* transfer) -> void {
       //log("chunk received");
       Capture* cap = (Capture*)transfer->user_data;
-      cap->ring_ready = (cap->ring_ready + cap->chunk_size) & cap->ring_mask;
+      auto ring_mask = cap->ring->buffer_len - 1;
+      cap->ring->cursor_ready = (cap->ring->cursor_ready + cap->chunk_size) & ring_mask;
       cap->bulk_pending--;
       cap->bulk_done++;
       cap->bulk_pool.push(transfer);
@@ -595,7 +598,7 @@ int Capture::queue_chunk() {
     1000);
 
   CHECK(libusb_submit_transfer(transfer));
-  ring_write = (ring_write + chunk_size) & ring_mask;
+  ring->cursor_write = (ring->cursor_write + chunk_size) & ring_mask;
   bulk_submitted++;
   bulk_pending++;
 

@@ -1,13 +1,16 @@
 #include "main.hpp"
 
-#include "BitChunk.hpp"
+#include "BitMips.hpp"
 #include "capture.hpp"
 #include "GLBase.h"
 #include "log.hpp"
+#include "BitBlob.hpp"
+#include "BitMips.hpp"
 
 #include "symlinks/glad/glad.h"
 #include "symlinks/imgui/imgui.h"
 #include <SDL2/SDL.h>
+#include <algorithm>
 
 void log(const char* format, ...);
 void err(const char* format, ...);
@@ -16,8 +19,41 @@ extern std::string log_buf;
 
 //------------------------------------------------------------------------------
 
+void gen_pattern(void* buf, size_t sample_count) {
+
+  printf("generating pattern\n");
+
+  auto time_a = timestamp();
+
+  uint8_t* bits = (uint8_t*)buf;
+
+  uint32_t x = 1;
+  for (size_t i = 0; i < sample_count; i++) {
+
+    //bits[i] = i;
+
+    //size_t t = i;
+    //t = t*((t>>9|t>>13)&25&t>>6);
+    //bits[i] = t;
+
+    size_t t = i;
+    t *= 0x23456789;
+    t ^= (t >> 45);
+    t *= 0x23456789;
+    t ^= (t >> 45);
+    bits[i] = t;
+  }
+
+  printf("generating pattern done in %12.8f sec\n", timestamp() - time_a);
+}
+
+//------------------------------------------------------------------------------
+
 void Main::init() {
   log("ZoomyTrace init");
+
+  ring = new RingBuffer(8ull * 1024ull * 1024ull);
+  //ring = new RingBuffer(64ull * 1024ull);
 
   cap = new Capture();
   cap->start_thread();
@@ -28,11 +64,25 @@ void Main::init() {
   window = create_gl_window("Logicdump", initial_screen_w, initial_screen_h);
 
   blit.init();
-
   trace_painter.init();
 
-  cap->ring_buffer = (uint8_t*)trace_painter.mapped_buffer;
-  cap->ring_buffer_len = 8*1024*1024;
+  blob = new BitBlob();
+  blob->channels = 8;
+  blob->sample_count = ring->buffer_len;
+  blob->stride = 8;
+  blob->bits_len = ring->buffer_len;
+  blob->bits = ring->buffer;
+
+  gen_pattern(blob->bits, blob->sample_count);
+
+  for (int i = 0; i < 8; i++) {
+    mips[i] = new BitMips();
+    mips[i]->update_mips(*blob, 1);
+  }
+
+  //cap->ring_buffer = (uint8_t*)trace_painter.mapped_buffer;
+  //cap->ring_buffer_len = 8*1024*1024;
+  cap->ring = ring;
 
   vcon.init({initial_screen_w, initial_screen_h});
 
@@ -145,12 +195,10 @@ void Main::update() {
 
   //----------------------------------------
 
-  /*
   while (!cap->cap_to_host.empty()) {
     auto res = cap->cap_to_host.get();
     log("<- %-16s 0x%08x 0x%016x %ld", capcmd_to_cstr(res.command), res.result, res.block, res.length);
   }
-  */
 
   double delta = new_now - old_now;
   vcon.update(delta);
@@ -177,6 +225,13 @@ void Main::update() {
 void Main::update_imgui() {
   ImGui::NewFrame();
 
+  ImGui::Begin("Viewport");
+  ImGui::Text("view x %f\n", vcon.view_smooth_snap._world_center.x);
+  ImGui::Text("view y %f\n", vcon.view_smooth_snap._world_center.y);
+  ImGui::Text("zoom x %f\n", vcon.view_smooth_snap._view_zoom.x);
+  ImGui::Text("zoom y %f\n", vcon.view_smooth_snap._view_zoom.y);
+  ImGui::End();
+
   ImGui::Begin("Capture Status");
 
   //static int packet_size = 1;
@@ -199,13 +254,13 @@ void Main::update_imgui() {
   ImGui::Text("bulk_done       %d", (int)cap->bulk_done);
 
   if (ImGui::TreeNode("Ring Buffer Settings")) {
-    ImGui::Text("ring_buffer     %p", cap->ring_buffer);
-    ImGui::Text("ring_size       %d", cap->ring_buffer_len);
-    ImGui::Text("ring_chunk      %d", cap->chunk_size);
+    ImGui::Text("ring_buffer     %p", ring->buffer);
+    ImGui::Text("ring_size       %ld", ring->buffer_len);
+    //ImGui::Text("ring_chunk      %d", ring->chunk_size);
 
-    ImGui::Text("ring_read       %d", (int)cap->ring_read );
-    ImGui::Text("ring_ready      %d", (int)cap->ring_ready);
-    ImGui::Text("ring_write      %d", (int)cap->ring_write);
+    ImGui::Text("ring_read       %d", (int)ring->cursor_read );
+    ImGui::Text("ring_ready      %d", (int)ring->cursor_ready);
+    ImGui::Text("ring_write      %d", (int)ring->cursor_write);
 
     ImGui::TreePop();
   }
@@ -270,9 +325,14 @@ void Main::render() {
   }
   */
 
+  {
+    auto len = std::min(ring->buffer_len, trace_painter.mapped_len);
+    memcpy(trace_painter.mapped_buffer, ring->buffer, len);
+  }
+
 
   dvec2 screen_size = { (double)screen_w, (double)screen_h };
-  trace_painter.blit(vcon.view_smooth_snap, screen_size, 0, 100, 1920, 64);
+  trace_painter.blit(vcon.view_smooth_snap, screen_size, 0, 100, 2048, 64);
 
   gui.render_gl(window);
 

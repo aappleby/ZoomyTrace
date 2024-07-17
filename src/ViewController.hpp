@@ -30,10 +30,10 @@ using namespace glm;
 
 struct Viewport {
 
-  static Viewport from_center_zoom(dvec2 center, double zoom);
-  double view_zoom() const;
-  double scale_world_to_screen() const;
-  double scale_screen_to_world() const;
+  static Viewport from_center_zoom(dvec2 center, dvec2 zoom);
+  dvec2 view_zoom() const;
+  dvec2 scale_world_to_screen() const;
+  dvec2 scale_screen_to_world() const;
   dvec2 screen_min(dvec2 screen_size) const;
   dvec2 screen_max(dvec2 screen_size) const;
   dvec2 world_center() const;
@@ -43,7 +43,7 @@ struct Viewport {
   dvec2 world_to_screen(dvec2 v, dvec2 screen_size) const;
   dvec2 screen_to_world(dvec2 v, dvec2 screen_size) const;
   Viewport center_on(dvec2 c);
-  Viewport zoom(dvec2 screen_pos, dvec2 screen_size, double zoom);
+  Viewport zoom(dvec2 screen_pos, dvec2 screen_size, dvec2 zoom);
   Viewport pan(dvec2 delta);
   Viewport snap();
   Viewport ease(Viewport target, double delta);
@@ -51,12 +51,12 @@ struct Viewport {
   static Viewport screenspace(dvec2 screen_size) {
     return {
       screen_size * 0.5,
-      0.0
+      {0, 0}
     };
   }
 
-  dvec2 _world_center = {};
-  double _view_zoom = 0;
+  dvec2  _world_center = {};
+  dvec2  _view_zoom = {0,0};
 };
 
 //--------------------------------------------------------------------------------------------------------------------------------------------------------------------------

@@ -2,6 +2,7 @@
 
 #include <stdint.h>
 #include <math.h>
+#include <stdio.h>
 
 //-----------------------------------------------------------------------------
 
@@ -41,11 +42,12 @@ Viewport ease(Viewport a, Viewport b, double delta) {
   dvec2 world_min = ease(world_min_a, world_min_b, delta);
   dvec2 world_max = ease(world_max_a, world_max_b, delta);
 
-  double zoom = -log2(world_max.x - world_min.x);
+  double zoom_x = -log2(world_max.x - world_min.x);
+  double zoom_y = -log2(world_max.y - world_min.y);
 
   return Viewport{
     (world_min + world_max) * 0.5,
-    zoom
+    {zoom_x, zoom_y}
   };
 }
 
@@ -61,31 +63,43 @@ union double_funtimes {
 
 //-----------------------------------------------------------------------------
 
-Viewport Viewport::from_center_zoom(dvec2 center, double zoom) {
+Viewport Viewport::from_center_zoom(dvec2 center, dvec2 zoom) {
   return Viewport{
     center,
     zoom
   };
 }
 
-double Viewport::view_zoom() const {
+dvec2 Viewport::view_zoom() const {
   return _view_zoom;
 }
 
-double Viewport::scale_world_to_screen() const {
-  return exp2(_view_zoom);
+dvec2 Viewport::scale_world_to_screen() const {
+  return {
+    exp2(_view_zoom.x),
+    exp2(_view_zoom.y),
+  };
 }
 
-double Viewport::scale_screen_to_world() const {
-  return 1.0 / exp2(_view_zoom);
+dvec2 Viewport::scale_screen_to_world() const {
+  return {
+    1.0 / exp2(_view_zoom.x),
+    1.0 / exp2(_view_zoom.y),
+  };
 }
 
 dvec2 Viewport::screen_min(dvec2 screen_size) const {
-  return _world_center - screen_size * scale_screen_to_world() * 0.5;
+  return {
+    _world_center.x - screen_size.x * scale_screen_to_world().x * 0.5,
+    _world_center.y - screen_size.y * scale_screen_to_world().y * 0.5
+  };
 }
 
 dvec2 Viewport::screen_max(dvec2 screen_size) const {
-  return _world_center + screen_size * scale_screen_to_world() * 0.5;
+  return {
+    _world_center.x + screen_size.x * scale_screen_to_world().x * 0.5,
+    _world_center.y + screen_size.y * scale_screen_to_world().y * 0.5
+  };
 };
 
 dvec2 Viewport::world_center() const {
@@ -119,22 +133,22 @@ dvec2 Viewport::screen_to_world(dvec2 v, dvec2 screen_size) const {
 //-----------------------------------------------------------------------------
 
 Viewport Viewport::center_on(dvec2 c) {
-  return Viewport::from_center_zoom(c, 3.0);
+  return Viewport::from_center_zoom(c, {3.0, 3.0});
 }
 
 //-----------------------------------------------------------------------------
 
-Viewport Viewport::zoom(dvec2 screen_pos, dvec2 screen_size, double zoom) {
-  double old_zoom = view_zoom();
-  double new_zoom = view_zoom() + zoom;
+Viewport Viewport::zoom(dvec2 screen_pos, dvec2 screen_size, dvec2 zoom) {
+  dvec2 old_zoom = view_zoom();
+  dvec2 new_zoom = view_zoom() + zoom;
 
   dvec2 screen_center = 0.5 * screen_size;
   auto screen_delta = screen_pos - screen_center;
 
-  auto new_center =
-    world_center()
-    + screen_delta / (exp2(old_zoom))
-    - screen_delta / (exp2(new_zoom));
+  dvec2 new_center = {
+    world_center().x + screen_delta.x / (exp2(old_zoom.x)) - screen_delta.x / (exp2(new_zoom.x)),
+    world_center().y + screen_delta.y / (exp2(old_zoom.y)) - screen_delta.y / (exp2(new_zoom.y)),
+  };
 
   return Viewport::from_center_zoom(new_center, new_zoom);
 }
@@ -142,19 +156,31 @@ Viewport Viewport::zoom(dvec2 screen_pos, dvec2 screen_size, double zoom) {
 //-----------------------------------------------------------------------------
 
 Viewport Viewport::pan(dvec2 screen_delta) {
+  //printf("screen delta %f %f\n", screen_delta.x, screen_delta.y);
   dvec2 world_delta = screen_delta * scale_screen_to_world();
+  //printf("world_delta %f %f\n", world_delta.x, world_delta.y);
+
   return Viewport::from_center_zoom(world_center() - world_delta, view_zoom());
 }
 
 //-----------------------------------------------------------------------------
 
 Viewport Viewport::snap() {
-  double zoom1 = view_zoom();
-  double zoom2 = round(zoom1 * 4.0) / 4.0;
-  double ppw2 = exp2(zoom2);
+  dvec2 zoom1 = view_zoom();
+  dvec2 zoom2 = {
+    round(zoom1.x * 4.0) / 4.0,
+    round(zoom1.y * 4.0) / 4.0,
+  };
+  dvec2 ppw2 = {
+    exp2(zoom2.x),
+    exp2(zoom2.y)
+  };
 
   dvec2 old_center = world_center();
-  dvec2 new_center = { round(old_center.x * ppw2) / ppw2, round(old_center.y * ppw2) / ppw2 };
+  dvec2 new_center = {
+    round(old_center.x * ppw2.x) / ppw2.x,
+    round(old_center.y * ppw2.y) / ppw2.y
+  };
 
   return Viewport::from_center_zoom(new_center, zoom2);
 }
@@ -186,8 +212,9 @@ void ViewController::update(double delta) {
 }
 
 void ViewController::on_mouse_wheel(dvec2 mouse_pos, dvec2 screen_size, double wheel) {
-  view_target = view_target.zoom(mouse_pos, screen_size, wheel);
+  view_target = view_target.zoom(mouse_pos, screen_size, {wheel, wheel});
   view_target_snap = view_target.snap();
+  //printf("new view zoom %f %f\n", view_target_snap._view_zoom.x, view_target_snap._view_zoom.y);
 }
 
 void ViewController::pan(dvec2 delta_pos) {
