@@ -18,10 +18,11 @@ public:
   uint32_t trace_vao = 0;
   uint32_t trace_vbo = 0;
   uint32_t trace_ubo = 0;
-  uint32_t trace_ssbo = 0;
   uint32_t trace_prog = 0;
 
-  uint8_t* mapped_buffer = nullptr;
+  uint32_t trace_ssbos[3];
+
+  uint8_t* mapped_buffers[3];
   size_t   mapped_len = 8*1024*1024;
 };
 

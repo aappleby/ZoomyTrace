@@ -83,12 +83,13 @@ void TracePainter::init() {
   trace_vao = create_vao();
   trace_vbo = create_vbo(sizeof(unit_quad), unit_quad);
 
-  trace_ssbo = create_ssbo(mapped_len);
-
-  mapped_buffer = (uint8_t*)map_ssbo(trace_ssbo, mapped_len);
-  for (int i = 0; i < 2048; i++) {
-    auto t = i & 0xFF;
-    mapped_buffer[i] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
+  for (int i = 0; i < 3; i++) {
+    trace_ssbos[i] = create_ssbo(mapped_len);
+    mapped_buffers[i] = (uint8_t*)map_ssbo(trace_ssbos[i], mapped_len);
+    for (int j = 0; j < 2048; j++) {
+      auto t = j & 0xFF;
+      mapped_buffers[i][j] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
+    }
   }
 
   glEnableVertexAttribArray(0);
@@ -98,7 +99,9 @@ void TracePainter::init() {
 }
 
 void TracePainter::exit() {
-  unmap_ssbo(trace_ssbo);
+  for (int i = 0; i < 3; i++) {
+    unmap_ssbo(trace_ssbos[i]);
+  }
 }
 
 //-----------------------------------------------------------------------------
@@ -126,11 +129,21 @@ void TracePainter::blit(Viewport view, dvec2 screen_size, int x, int y, int w, i
   bind_shader(trace_prog);
   bind_vao(trace_vao);
   bind_ubo(trace_prog, "TraceUniforms", 0, trace_ubo);
-  bind_ssbo(trace_ssbo, 0);
+  bind_ssbo(trace_ssbos[0], 0);
 
   glDisable(GL_BLEND);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glEnable(GL_BLEND);
+
+  auto temp_ssbo = trace_ssbos[0];
+  trace_ssbos[0] = trace_ssbos[1];
+  trace_ssbos[1] = trace_ssbos[2];
+  trace_ssbos[2] = temp_ssbo;
+
+  auto temp_buf  = mapped_buffers[0];
+  mapped_buffers[0] = mapped_buffers[1];
+  mapped_buffers[1] = mapped_buffers[2];
+  mapped_buffers[2] = temp_buf;
 }
 
 //-----------------------------------------------------------------------------

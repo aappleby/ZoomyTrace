@@ -286,7 +286,7 @@ void update_ssbo(int ssbo, const void* data, size_t size_bytes) {
 void* map_ssbo(int ssbo, int size_bytes) {
   glBindBuffer(GL_SHADER_STORAGE_BUFFER, ssbo);
   void* result = glMapBufferRange(GL_SHADER_STORAGE_BUFFER, 0, size_bytes,
-    GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_COHERENT_BIT);
+    GL_MAP_WRITE_BIT | GL_MAP_PERSISTENT_BIT | GL_MAP_FLUSH_EXPLICIT_BIT);
   return result;
 }
 

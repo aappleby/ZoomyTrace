@@ -55,6 +55,8 @@ void Main::init() {
   ring = new RingBuffer(8ull * 1024ull * 1024ull);
   //ring = new RingBuffer(64ull * 1024ull);
 
+  memset(ring->buffer, 0, ring->buffer_len);
+
   cap = new Capture();
   cap->start_thread();
 
@@ -80,8 +82,6 @@ void Main::init() {
     mips[i]->update_mips(*blob, 1);
   }
 
-  //cap->ring_buffer = (uint8_t*)trace_painter.mapped_buffer;
-  //cap->ring_buffer_len = 8*1024*1024;
   cap->ring = ring;
 
   vcon.init({initial_screen_w, initial_screen_h});
@@ -212,20 +212,6 @@ void Main::update() {
   vcon.update(delta);
 
   update_imgui();
-
-  /*
-  uint32_t pixels[1920];
-  for (int i = 0; i < 1920; i++) {
-    uint8_t t = 0;
-    if (cap->ring_buffer) {
-      t = cap->ring_buffer[i];
-    }
-    else {
-      t = rng() & 0xFF;
-    }
-    pixels[i] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
-  }
-  */
 }
 
 //------------------------------------------------------------------------------
@@ -310,7 +296,9 @@ void Main::update_imgui() {
     }
   }
 
-  ImGui::Text("frame %06d", frame);
+  ImGui::Text("frame      %06d", frame);
+  ImGui::Text("frame rate %f", 1.0 / (new_now - old_now));
+  ImGui::Text("frame time %f", new_now - old_now);
 
   {
       ImGui::Begin("log");
@@ -336,17 +324,18 @@ void Main::render() {
   glViewport(0, 0, screen_w, screen_h);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  /*
   for (int i = 0; i < 1024; i++) {
     auto t = rng() & 0xFF;
-    trace_painter.mapped_buffer[i] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
+    trace_painter.mapped_buffers[0][i] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
   }
-  */
 
-  {
-    auto len = std::min(ring->buffer_len, trace_painter.mapped_len);
-    memcpy(trace_painter.mapped_buffer, ring->buffer, len);
-  }
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, trace_painter.trace_ssbos[0]);
+  glFlushMappedBufferRange(GL_SHADER_STORAGE_BUFFER, 0, 1024);
+
+  //{
+  //  auto len = std::min(ring->buffer_len, trace_painter.mapped_len);
+  //  memcpy(trace_painter.mapped_buffer, ring->buffer, len);
+  //}
 
 
   dvec2 screen_size = { (double)screen_w, (double)screen_h };
