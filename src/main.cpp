@@ -104,6 +104,8 @@ void Main::update() {
   dvec2 screen_size = { (double)screen_w, (double)screen_h };
 
   mouse_buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
+  dvec2 mouse_pos_screen = { (double)mouse_x, (double)mouse_y };
+
   keyboard_state = SDL_GetKeyboardState(&key_count);
   SDL_GetCurrentDisplayMode(0, &display_mode);
 
@@ -179,10 +181,15 @@ void Main::update() {
           vcon.view_target_snap = Viewport(screen_size * 0.5, {0, 0});
         }
       }
+      else if (event.key.keysym.sym == SDLK_MINUS) {
+        vcon.zoom(mouse_pos_screen, screen_size, -0.25);
+      }
+      else if (event.key.keysym.sym == SDLK_EQUALS) {
+        vcon.zoom(mouse_pos_screen, screen_size, 0.25);
+      }
     }
 
     if (event.type == SDL_MOUSEWHEEL && !imgui_io.WantCaptureMouse) {
-      dvec2 mouse_pos_screen = { (double)mouse_x, (double)mouse_y };
       vcon.zoom(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
     }
 

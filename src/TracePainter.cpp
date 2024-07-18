@@ -38,7 +38,7 @@ out vec2 ftex;
 void main() {
 
   //ftex.x = vpos.x * 2.0 * 1024.0 * 1024.0;
-  ftex.x = vpos.x * 2.0 * 1024.0;
+  ftex.x = vpos.x * 1920.0;
   ftex.y = 0.0;
 
   float dst_x = remap(vpos.x, 0.0, 1.0, blit_dst_rect.x, blit_dst_rect.z);
@@ -111,9 +111,6 @@ struct TraceUniforms {
 void TracePainter::blit(Viewport view, dvec2 screen_size, int x, int y, int w, int h) {
 
   TraceUniforms uniforms;
-
-  uint64_t vx = *((uint64_t*)(&view._zoom.x));
-  printf("view zoom x 0x%016lx %.40f\n", vx, view._zoom.x);
 
   uniforms.viewport = {
     (float)view.world_min(screen_size).x,
