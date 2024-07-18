@@ -13,11 +13,6 @@ public:
   void init();
   void exit();
 
-  void blit(Viewport view, dvec2 screen_size,
-            int tw, int th,
-            int sx, int sy, int sw, int sh,
-            int dx, int dy, int dw, int dh);
-
   void blit(Viewport view, dvec2 screen_size, int x, int y, int w, int h);
 
   uint32_t trace_vao = 0;

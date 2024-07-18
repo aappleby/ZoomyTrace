@@ -1,8 +1,9 @@
 #include "TracePainter.hpp"
 
 #include "GLBase.h"
-#include "../glad/glad.h"
+#include "symlinks/glad/glad.h"
 #include "ViewController.hpp"
+#include <stdio.h>
 
 using namespace glm;
 
@@ -16,9 +17,6 @@ layout(std140) uniform TraceUniforms
 {
   vec4 viewport;
   vec4 blit_dst_rect;
-  dvec4 viewport_d;
-  dvec4 blit_dst_rect_d;
-  uint offset_x;
 };
 
 layout(std430, binding = 0) buffer TraceBuffer
@@ -27,12 +25,6 @@ layout(std430, binding = 0) buffer TraceBuffer
 };
 
 float remap(float x, float a1, float a2, float b1, float b2) {
-  x = (x - a1) / (a2 - a1);
-  x = x * (b2 - b1) + b1;
-  return x;
-}
-
-double remap_d(double x, double a1, double a2, double b1, double b2) {
   x = (x - a1) / (a2 - a1);
   x = x * (b2 - b1) + b1;
   return x;
@@ -52,14 +44,8 @@ void main() {
   float dst_x = remap(vpos.x, 0.0, 1.0, blit_dst_rect.x, blit_dst_rect.z);
   float dst_y = remap(vpos.y, 0.0, 1.0, blit_dst_rect.y, blit_dst_rect.w);
 
-  double dst_x_d = remap_d(vpos.x, 0.0, 1.0, blit_dst_rect_d.x, blit_dst_rect_d.z);
-  double dst_y_d = remap_d(vpos.y, 0.0, 1.0, blit_dst_rect_d.y, blit_dst_rect_d.w);
-
-  //gl_Position.x = remap(dst_x, viewport.x, viewport.z, -1.0,  1.0);
-  //gl_Position.y = remap(dst_y, viewport.y, viewport.w,  1.0, -1.0);
-
-  gl_Position.x = float(remap_d(dst_x_d, viewport_d.x, viewport_d.z, -1.0,  1.0));
-  gl_Position.y = float(remap_d(dst_y_d, viewport_d.y, viewport_d.w,  1.0, -1.0));
+  gl_Position.x = remap(dst_x, viewport.x, viewport.z, -1.0,  1.0);
+  gl_Position.y = remap(dst_y, viewport.y, viewport.w,  1.0, -1.0);
 
   gl_Position.z = 0.0;
   gl_Position.w = 1.0;
@@ -73,7 +59,7 @@ out vec4 frag;
 uniform sampler2D tex;
 
 void main() {
-  uint color = colors[uint(ftex.x) + offset_x];
+  uint color = colors[uint(ftex.x)];
 
   frag = unpackUnorm4x8(color);
 }
@@ -117,45 +103,26 @@ void TracePainter::exit() {
 
 //-----------------------------------------------------------------------------
 
-void TracePainter::blit(Viewport view, dvec2 screen_size, int x, int y, int w, int h) {
-  blit(view, screen_size, w, h, 0, 0, w, h, x, y, w, h);
-}
-
-//-----------------------------------------------------------------------------
-
 struct TraceUniforms {
   vec4     viewport;
   vec4     blit_dst_rect;
-  dvec4    viewport_d;
-  dvec4    blit_dst_rect_d;
-  uint32_t offset_x;
 };
 
-void TracePainter::blit(Viewport view, dvec2 screen_size,
-                   int tw, int th,
-                   int sx, int sy, int sw, int sh,
-                   int dx, int dy, int dw, int dh) {
+void TracePainter::blit(Viewport view, dvec2 screen_size, int x, int y, int w, int h) {
+
   TraceUniforms uniforms;
 
+  uint64_t vx = *((uint64_t*)(&view._zoom.x));
+  printf("view zoom x 0x%016lx %.40f\n", vx, view._zoom.x);
+
   uniforms.viewport = {
-    (float)view.screen_min(screen_size).x,
-    (float)view.screen_min(screen_size).y,
-    (float)view.screen_max(screen_size).x,
-    (float)view.screen_max(screen_size).y,
+    (float)view.world_min(screen_size).x,
+    (float)view.world_min(screen_size).y,
+    (float)view.world_max(screen_size).x,
+    (float)view.world_max(screen_size).y,
   };
 
-  uniforms.viewport_d = {
-    view.screen_min(screen_size).x,
-    view.screen_min(screen_size).y,
-    view.screen_max(screen_size).x,
-    view.screen_max(screen_size).y,
-  };
-
-  uniforms.blit_dst_rect = {dx, dy, dx+dw, dy+dh};
-
-  uniforms.blit_dst_rect_d = {dx, dy, dx+dw, dy+dh};
-  //uniforms.offset_x = 2*1024*1024 - 128;
-  uniforms.offset_x = 0;
+  uniforms.blit_dst_rect = {x, y, x+w, y+h};
 
   update_ubo(trace_ubo, sizeof(uniforms), &uniforms);
 

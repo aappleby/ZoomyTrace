@@ -96,7 +96,7 @@ int main(int argc, char* argv[]) {
 
   SDL_RenderSetVSync(renderer, 1);
 
-  double old_now = timestamp();
+  //double old_now = timestamp();
   double new_now = timestamp();
 
   dvec2 zoom = {0,0};
@@ -121,9 +121,14 @@ int main(int argc, char* argv[]) {
     //----------
     // Bookkeeping
 
-    old_now = new_now;
+    SDL_DisplayMode display_mode;
+    SDL_GetCurrentDisplayMode(0, &display_mode);
+
+    //old_now = new_now;
     new_now = timestamp();
-    double delta = new_now - old_now;
+    // Hax, force frame delta to be exactly the refresh interval
+    //double dt = new_now - old_now;
+    double dt = 1.0 / double(display_mode.refresh_rate);
 
     int screen_w = 0, screen_h = 0;
     SDL_GL_GetDrawableSize((SDL_Window*)window, &screen_w, &screen_h);
@@ -143,7 +148,7 @@ int main(int argc, char* argv[]) {
         //double zoom_per_tick = 0.0625;
         double zoom_per_tick = 0.25;
         //double zoom_per_tick = 1.0;
-        view_control.on_mouse_wheel(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
+        view_control.zoom(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
       }
 
       if (event.type == SDL_MOUSEMOTION) {
@@ -154,13 +159,13 @@ int main(int argc, char* argv[]) {
       }
     }
 
-    view_control.update(delta);
+    view_control.update(dt);
 
     //----------
     // Update wave tex
 
-    zoom   = view_control.view_smooth_snap.view_zoom();
-    origin = view_control.view_smooth_snap.world_center().x + blob.sample_count / 2.0;
+    zoom   = view_control.view_smooth_snap._zoom;
+    origin = view_control.view_smooth_snap._center.x + blob.sample_count / 2.0;
 
     origin += sin(new_now * 1.0) * 1.0 * exp2(-zoom.x);
 

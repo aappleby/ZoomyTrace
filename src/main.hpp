@@ -38,8 +38,8 @@ public:
   bool quit = false;
   int frame = 0;
   //double zoom_per_tick = 0.0625;
-  //double zoom_per_tick = 0.25;
-  double zoom_per_tick = 1.0;
+  double zoom_per_tick = 0.25;
+  //double zoom_per_tick = 1.0;
   const uint8_t* keyboard_state;
   int key_count;
   SDL_DisplayMode display_mode;

@@ -101,6 +101,8 @@ void Main::init() {
 void Main::update() {
 
   SDL_GL_GetDrawableSize((SDL_Window*)window, &screen_w, &screen_h);
+  dvec2 screen_size = { (double)screen_w, (double)screen_h };
+
   mouse_buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
   keyboard_state = SDL_GetKeyboardState(&key_count);
   SDL_GetCurrentDisplayMode(0, &display_mode);
@@ -173,16 +175,15 @@ void Main::update() {
         if (event.key.keysym.mod & KMOD_LSHIFT) {
           quit = true;
         } else {
-          vcon.view_target      = Viewport::screenspace({screen_w, screen_h});
-          vcon.view_target_snap = Viewport::screenspace({screen_w, screen_h});
+          vcon.view_target      = Viewport(screen_size * 0.5, {0, 0});
+          vcon.view_target_snap = Viewport(screen_size * 0.5, {0, 0});
         }
       }
     }
 
     if (event.type == SDL_MOUSEWHEEL && !imgui_io.WantCaptureMouse) {
-      dvec2 screen_size = { (double)screen_w, (double)screen_h };
       dvec2 mouse_pos_screen = { (double)mouse_x, (double)mouse_y };
-      vcon.on_mouse_wheel(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
+      vcon.zoom(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
     }
 
     if (event.type == SDL_MOUSEMOTION && !imgui_io.WantCaptureMouse) {
@@ -226,10 +227,20 @@ void Main::update_imgui() {
   ImGui::NewFrame();
 
   ImGui::Begin("Viewport");
-  ImGui::Text("view x %f\n", vcon.view_smooth_snap._world_center.x);
-  ImGui::Text("view y %f\n", vcon.view_smooth_snap._world_center.y);
-  ImGui::Text("zoom x %f\n", vcon.view_smooth_snap._view_zoom.x);
-  ImGui::Text("zoom y %f\n", vcon.view_smooth_snap._view_zoom.y);
+  {
+    auto w1 = vcon.view_target._center;
+    auto z1 = vcon.view_target._zoom;
+    auto w2 = vcon.view_target_snap._center;
+    auto z2 = vcon.view_target_snap._zoom;
+    auto w3 = vcon.view_smooth._center;
+    auto z3 = vcon.view_smooth._zoom;
+    auto w4 = vcon.view_smooth_snap._center;
+    auto z4 = vcon.view_smooth_snap._zoom;
+    ImGui::Text("view target      %f %f %f %f\n", w1.x, w1.y, z1.x, z1.y);
+    ImGui::Text("view target snap %f %f %f %f\n", w2.x, w2.y, z2.x, z2.y);
+    ImGui::Text("view smooth      %f %f %f %f\n", w3.x, w3.y, z3.x, z3.y);
+    ImGui::Text("view smooth snap %f %f %f %f\n", w4.x, w4.y, z4.x, z4.y);
+  }
   ImGui::End();
 
   ImGui::Begin("Capture Status");

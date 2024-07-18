@@ -125,10 +125,10 @@ void Blitter::blit(Viewport view, dvec2 screen_size,
   BlitUniforms blit_uniforms;
 
   blit_uniforms.viewport = {
-    (float)view.screen_min(screen_size).x,
-    (float)view.screen_min(screen_size).y,
-    (float)view.screen_max(screen_size).x,
-    (float)view.screen_max(screen_size).y,
+    (float)view.world_min(screen_size).x,
+    (float)view.world_min(screen_size).y,
+    (float)view.world_max(screen_size).x,
+    (float)view.world_max(screen_size).y,
   };
 
   blit_uniforms.blit_src_rect = {sx, sy, sx+sw, sy+sh};
@@ -158,10 +158,10 @@ void Blitter::blit_mono(Viewport view, dvec2 screen_size,
   BlitUniforms blit_uniforms;
 
   blit_uniforms.viewport = {
-    (float)view.screen_min(screen_size).x,
-    (float)view.screen_min(screen_size).y,
-    (float)view.screen_max(screen_size).x,
-    (float)view.screen_max(screen_size).y,
+    (float)view.world_min(screen_size).x,
+    (float)view.world_min(screen_size).y,
+    (float)view.world_max(screen_size).x,
+    (float)view.world_max(screen_size).y,
   };
 
   blit_uniforms.blit_src_rect = {sx, sy, sx+sw, sy+sh};
