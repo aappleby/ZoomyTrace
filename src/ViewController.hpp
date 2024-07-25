@@ -39,7 +39,7 @@ struct ViewController {
   void init(dvec2 screen_size);
   void update(double dt);
 
-  void zoom(dvec2 mouse_pos, dvec2 screen_size, double delta_zoom);
+  void zoom(dvec2 mouse_pos, dvec2 screen_size, double delta_zoom_x, double delta_zoom_y);
   void pan (dvec2 delta_pos);
 
   Viewport view_target;

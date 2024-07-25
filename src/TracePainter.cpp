@@ -15,14 +15,23 @@ const char* trace_glsl = R"(
 
 layout(std140) uniform TraceUniforms
 {
-  vec4 viewport;
-  vec4 blit_dst_rect;
+  float  blit_x;
+  float  blit_y;
+  float  blit_w;
+  float  blit_h;
+  vec4   screen_size;
+  double scale;
+  double offset;
+  uint   stride;
+  uint   channel;
+  int    miplevel;
 };
 
-layout(std430, binding = 0) buffer TraceBuffer
-{
-  uint colors[];
-};
+layout(std430, binding = 0) buffer Mip0 { uint mip0[]; };
+layout(std430, binding = 1) buffer Mip1 { uint mip1[]; };
+layout(std430, binding = 2) buffer Mip2 { uint mip2[]; };
+layout(std430, binding = 3) buffer Mip3 { uint mip3[]; };
+layout(std430, binding = 4) buffer Mip4 { uint mip4[]; };
 
 float remap(float x, float a1, float a2, float b1, float b2) {
   x = (x - a1) / (a2 - a1);
@@ -30,67 +39,119 @@ float remap(float x, float a1, float a2, float b1, float b2) {
   return x;
 }
 
+//------------------------------------------------------------------------------
+
 #ifdef _VERTEX_
 
-layout(location = 0) in  vec2 vpos;
 out vec2 ftex;
 
 void main() {
 
-  //ftex.x = vpos.x * 2.0 * 1024.0 * 1024.0;
-  ftex.x = vpos.x * 1920.0;
-  ftex.y = 0.0;
+  float vpos_x = float((gl_VertexID >> 0) & 1);
+  float vpos_y = float((gl_VertexID >> 1) & 1);
 
-  float dst_x = remap(vpos.x, 0.0, 1.0, blit_dst_rect.x, blit_dst_rect.z);
-  float dst_y = remap(vpos.y, 0.0, 1.0, blit_dst_rect.y, blit_dst_rect.w);
+  float screen_x = vpos_x * blit_w + blit_x;
+  float screen_y = vpos_y * blit_h + blit_y;
 
-  gl_Position.x = remap(dst_x, viewport.x, viewport.z, -1.0,  1.0);
-  gl_Position.y = remap(dst_y, viewport.y, viewport.w,  1.0, -1.0);
+  float norm_x = (screen_x * screen_size.z) * 2.0 - 1.0;
+  float norm_y = (screen_y * screen_size.w) * 2.0 - 1.0;
 
-  gl_Position.z = 0.0;
-  gl_Position.w = 1.0;
-}
-
-#else
-
-in  vec2 ftex;
-out vec4 frag;
-
-uniform sampler2D tex;
-
-void main() {
-  uint color = colors[uint(ftex.x)];
-
-  frag = unpackUnorm4x8(color);
+  gl_Position = vec4(norm_x, -norm_y, 0.0, 1.0);
 }
 
 #endif
+
+//------------------------------------------------------------------------------
+
+#ifdef _FRAGMENT_
+
+out vec4 frag;
+
+void main() {
+  double x = double(gl_FragCoord.x) * scale + offset;
+
+  if (x < 0.0) {
+    frag = vec4(0,0,0.2,1);
+    return;
+  }
+  if (x >= 4294967296.0) {
+    frag = vec4(0,0,0.2,1);
+    return;
+  }
+
+  x = floor(x);
+
+  if (miplevel == 0) {
+    double stride_index = x * stride + channel;
+    double word_index   = (stride_index) / 32.0;
+    double bit_index    = mod(stride_index, 32.0);
+
+    uint bit = bitfieldExtract(mip0[int(word_index)], int(bit_index), 1);
+
+    frag = bit == 1 ? vec4(1,1,1,1) : vec4(0,0,0,1);
+  }
+  else if (miplevel == 1) {
+    x /= 128;
+    double word_index = x / 4;
+    double byte_index = mod(x, 4);
+    uint byte = bitfieldExtract(mip1[int(word_index)], int(byte_index) * 8, 8);
+
+    float t = float(byte) / 255.0;
+    frag = vec4(t, t, t, 1);
+  }
+  else if (miplevel == 2) {
+    x /= 128 * 128;
+    double word_index = x / 4;
+    double byte_index = mod(x, 4);
+    uint byte = bitfieldExtract(mip2[int(word_index)], int(byte_index) * 8, 8);
+
+    float t = float(byte) / 255.0;
+    frag = vec4(t, t, t, 1);
+  }
+  else if (miplevel == 3) {
+    x /= 128 * 128 * 128;
+    double word_index = x / 4;
+    double byte_index = mod(x, 4);
+    uint byte = bitfieldExtract(mip3[int(word_index)], int(byte_index) * 8, 8);
+
+    float t = float(byte) / 255.0;
+    frag = vec4(t, t, t, 1);
+  }
+  else if (miplevel == 4) {
+    x /= 128 * 128 * 128 * 128;
+    double word_index = x / 4;
+    double byte_index = mod(x, 4);
+    uint byte = bitfieldExtract(mip4[int(word_index)], int(byte_index) * 8, 8);
+
+    float t = float(byte) / 255.0;
+    frag = vec4(t, t, t, 1);
+  }
+  else {
+    frag = vec4(0, 0.2, 0.2, 1);
+  }
+}
+
+#endif
+
+//------------------------------------------------------------------------------
 
 )";
 
 //-----------------------------------------------------------------------------
 
+template<typename T>
+void rotate_bufs(T* bufs, int count) {
+  auto temp = bufs[0];
+  for (int i = 0; i < count; i++) {
+    bufs[i] = i == count - 1 ? temp : bufs[i + 1];
+  }
+}
+
+//-----------------------------------------------------------------------------
+
 void TracePainter::init() {
 
-  float unit_quad[] = {
-    0, 0,
-    1, 0,
-    0, 1,
-    1, 1,
-  };
-
   trace_ubo = create_ubo();
-  trace_vao = create_vao();
-  trace_vbo = create_vbo(sizeof(unit_quad), unit_quad);
-
-  for (int i = 0; i < 3; i++) {
-    trace_ssbos[i] = create_ssbo(mapped_len);
-    mapped_buffers[i] = (uint8_t*)map_ssbo(trace_ssbos[i], mapped_len);
-    for (int j = 0; j < 2048; j++) {
-      auto t = j & 0xFF;
-      mapped_buffers[i][j] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
-    }
-  }
 
   glEnableVertexAttribArray(0);
   glVertexAttribPointer(0, 2, GL_FLOAT, GL_FALSE, 0, 0);
@@ -99,51 +160,86 @@ void TracePainter::init() {
 }
 
 void TracePainter::exit() {
-  for (int i = 0; i < 3; i++) {
-    unmap_ssbo(trace_ssbos[i]);
-  }
 }
 
 //-----------------------------------------------------------------------------
 
 struct TraceUniforms {
-  vec4     viewport;
-  vec4     blit_dst_rect;
+  float blit_x;
+  float blit_y;
+  float blit_w;
+  float blit_h;
+  vec4     screen_size;
+  double   scale;
+  double   offset;
+  uint32_t stride;
+  uint32_t channel;
+  int32_t  miplevel;
 };
 
-void TracePainter::blit(Viewport view, dvec2 screen_size, int x, int y, int w, int h) {
+void TracePainter::blit(
+  Viewport view, dvec2 screen_size,
+  int x, int y, int w, int h,
+  TraceBuffer& trace, MipBuffer& mips, int channel) {
 
   TraceUniforms uniforms;
 
-  uniforms.viewport = {
-    (float)view.world_min(screen_size).x,
-    (float)view.world_min(screen_size).y,
-    (float)view.world_max(screen_size).x,
-    (float)view.world_max(screen_size).y,
-  };
+  dvec2 world_min = view.world_min(screen_size);
+  dvec2 world_max = view.world_max(screen_size);
 
-  uniforms.blit_dst_rect = {x, y, x+w, y+h};
+  uniforms.blit_x = x;
+  uniforms.blit_y = y;
+  uniforms.blit_w = w;
+  uniforms.blit_h = h;
+  uniforms.screen_size = { screen_size.x, screen_size.y, 1.0 / screen_size.x, 1.0 / screen_size.y };
+
+  uniforms.scale  = (world_max.x - world_min.x) / screen_size.x;
+  uniforms.offset = world_min.x;
+
+  //uniforms.scale = { screen_size.x, 1.0 };
+  //uniforms.offset_coarse = 3000000000;
+  //uniforms.offset_fine   = 0;
+
+  uniforms.channel = channel;
+  uniforms.stride = trace.stride;
+  uniforms.miplevel = (-view._zoom.x) / 7;
 
   update_ubo(trace_ubo, sizeof(uniforms), &uniforms);
 
   bind_shader(trace_prog);
-  bind_vao(trace_vao);
   bind_ubo(trace_prog, "TraceUniforms", 0, trace_ubo);
-  bind_ssbo(trace_ssbos[0], 0);
+
+  bind_ssbo(trace.ssbo, 0, 0, trace.ssbo_len);
+  bind_ssbo(mips.ssbo,  1, mips.mip1_offset, mips.mip1_len);
+  bind_ssbo(mips.ssbo,  2, mips.mip2_offset, mips.mip2_len);
+  bind_ssbo(mips.ssbo,  3, mips.mip3_offset, mips.mip3_len);
+  bind_ssbo(mips.ssbo,  4, mips.mip4_offset, mips.mip4_len);
+
+  /*
+  {
+    int64_t ssbo_binding;
+    int64_t ssbo_align;
+    int64_t ssbo_start;
+    int64_t ssbo_size;
+
+    glGetInteger64v(GL_SHADER_STORAGE_BUFFER_BINDING,          &ssbo_binding);
+    glGetInteger64v(GL_SHADER_STORAGE_BUFFER_OFFSET_ALIGNMENT, &ssbo_align);
+    glGetInteger64i_v(GL_SHADER_STORAGE_BUFFER_START,            0, &ssbo_start);
+    glGetInteger64i_v(GL_SHADER_STORAGE_BUFFER_SIZE,             0, &ssbo_size);
+
+    printf("ssbo_binding %ld\n", ssbo_binding);
+    printf("ssbo_align   %ld\n", ssbo_align);
+    printf("ssbo_start   %ld\n", ssbo_start);
+    printf("ssbo_size    %ld\n", ssbo_size);
+  }
+  */
 
   glDisable(GL_BLEND);
   glDrawArrays(GL_TRIANGLE_STRIP, 0, 4);
   glEnable(GL_BLEND);
 
-  auto temp_ssbo = trace_ssbos[0];
-  trace_ssbos[0] = trace_ssbos[1];
-  trace_ssbos[1] = trace_ssbos[2];
-  trace_ssbos[2] = temp_ssbo;
-
-  auto temp_buf  = mapped_buffers[0];
-  mapped_buffers[0] = mapped_buffers[1];
-  mapped_buffers[1] = mapped_buffers[2];
-  mapped_buffers[2] = temp_buf;
+  //rotate_bufs(trace_ssbos, buf_count);
+  //rotate_bufs(mapped_buffers, buf_count);
 }
 
 //-----------------------------------------------------------------------------

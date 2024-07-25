@@ -111,8 +111,8 @@ void ViewController::update(double dt) {
   view_smooth_snap = view_smooth_snap.ease(view_target_snap, dt);
 }
 
-void ViewController::zoom(dvec2 mouse_pos, dvec2 screen_size, double delta_zoom) {
-  view_target = view_target.zoom(mouse_pos, screen_size, {delta_zoom, delta_zoom});
+void ViewController::zoom(dvec2 mouse_pos, dvec2 screen_size, double delta_zoom_x, double delta_zoom_y) {
+  view_target = view_target.zoom(mouse_pos, screen_size, {delta_zoom_x, delta_zoom_y});
   view_target_snap = view_target.snap();
 }
 

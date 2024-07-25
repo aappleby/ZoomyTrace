@@ -9,7 +9,7 @@
 #include <math.h>
 
 #include "log.hpp"
-#include "BitMips.hpp"
+#include "Bits.hpp"
 
 #ifdef _MSC_VER
 #  include <intrin.h>
@@ -25,61 +25,73 @@
 
 //------------------------------------------------------------------------------
 
-void gen_pattern(void* buf, size_t sample_count) {
+void gen_pattern(TraceBuffer& trace) {
+  assert(trace.channels == 8);
+  assert(trace.stride == 8);
 
-  printf("generating pattern\n");
+  uint8_t* bits = (uint8_t*)trace.blob;
 
-  auto time_a = timestamp();
-
-  uint8_t* bits = (uint8_t*)buf;
-
-  uint32_t x = 1;
-  for (size_t i = 0; i < sample_count; i++) {
+  for (size_t i = 0; i < trace.samples; i++) {
 
     //bits[i] = i;
 
-    //size_t t = i;
-    //t = t*((t>>9|t>>13)&25&t>>6);
-    //bits[i] = t;
+    size_t t = i + 0x993781;
+    t = t*((t>>9|t>>13)&25&t>>6);
 
-    size_t t = i;
-    t *= 0x23456789;
-    t ^= (t >> 45);
-    t *= 0x23456789;
-    t ^= (t >> 45);
     bits[i] = t;
+
+    //size_t t = i;
+    //t *= 0x23456789;
+    //t ^= (t >> 45);
+    //t *= 0x23456789;
+    //t ^= (t >> 45);
+    //bits[i] = t;
   }
 
-  printf("generating pattern done in %12.8f sec\n", timestamp() - time_a);
 }
 
 //------------------------------------------------------------------------------
 
 int main(int argc, char* argv[]) {
 
+  double time_a, time_b;
 
-  //size_t sample_count = 32ull * 1024ull * 1024ull * 1024ull;
-  //size_t sample_count = 1024ull * 1024ull;
-  //size_t bits_len = sample_count / 8;
-  //uint8_t* bits = new uint8_t[bits_len];
+  TraceBuffer trace;
+  trace.samples  = 65536ull;
+  trace.channels = 8;
+  trace.stride   = 8;
+  trace.ssbo_len = (trace.samples * trace.stride + 7) / 8;
+  trace.ssbo     = -1;
+  trace.blob     = new uint8_t[trace.ssbo_len];
 
-  //BitBlob blob(1024ull * 1024ull, 8, 8);
+  printf("generating pattern\n");
+  time_a = timestamp();
+  gen_pattern(trace);
+  time_b = timestamp();
+  printf("generating pattern done in %12.8f sec\n", time_b - time_a);
 
-  BitBlob blob;
-  blob.channels = 8;
-  blob.sample_count = 1024ull * 1024ull;
-  blob.stride = 8;
 
-  size_t max_index = blob.sample_count * blob.stride;
-  blob.bits_len = (max_index + 7) / 8;
-  blob.bits = new uint8_t[blob.bits_len];
-
-  gen_pattern(blob.bits, blob.sample_count);
-
-  BitMips mips[8];
+  time_a = timestamp();
+  MipBuffer mips[8];
   for (int i = 0; i < 8; i++) {
-    mips[i].update_mips(blob, 1);
+    mips[i].samples = trace.samples;
+
+    size_t len = (trace.samples + 127) / 128;
+    mips[i].mip1 = new uint8_t[len];
+
+    len = (len + 127) / 128;
+    mips[i].mip2 = new uint8_t[len];
+
+    len = (len + 127) / 128;
+    mips[i].mip3 = new uint8_t[len];
+
+    len = (len + 127) / 128;
+    mips[i].mip4 = new uint8_t[len];
+
+    update_mips(trace, i, 0, trace.samples, mips[i]);
   }
+  time_b = timestamp();
+  printf("generating mips took %f\n", time_b - time_a);
 
   //----------
 
@@ -100,7 +112,7 @@ int main(int argc, char* argv[]) {
   double new_now = timestamp();
 
   dvec2 zoom = {0,0};
-  double origin = blob.sample_count / 2.0;
+  double origin = trace.samples / 2.0;
 
   ViewController view_control;
 
@@ -148,13 +160,21 @@ int main(int argc, char* argv[]) {
         //double zoom_per_tick = 0.0625;
         double zoom_per_tick = 0.25;
         //double zoom_per_tick = 1.0;
-        view_control.zoom(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
+        view_control.zoom(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick, 0);
       }
 
       if (event.type == SDL_MOUSEMOTION) {
         if (event.motion.state & SDL_BUTTON_LMASK) {
           dvec2 rel = { (double)event.motion.xrel, (double)event.motion.yrel };
           view_control.pan(rel);
+        }
+      }
+
+      if (event.type == SDL_KEYDOWN) {
+        if (event.key.keysym.sym == SDLK_ESCAPE) {
+          if (event.key.keysym.mod & KMOD_LSHIFT) {
+            quit = true;
+          }
         }
       }
     }
@@ -165,7 +185,7 @@ int main(int argc, char* argv[]) {
     // Update wave tex
 
     zoom   = view_control.view_smooth_snap._zoom;
-    origin = view_control.view_smooth_snap._center.x + blob.sample_count / 2.0;
+    origin = view_control.view_smooth_snap._center.x + trace.samples / 2.0;
 
     origin += sin(new_now * 1.0) * 1.0 * exp2(-zoom.x);
 
@@ -180,26 +200,12 @@ int main(int argc, char* argv[]) {
 
     double traces[8][WINDOW_WIDTH];
 
-    //void render(void* bits, size_t sample_count, double bar_min, double bar_max, double view_min, double view_max, double* ch0_trace, int window_width);
-
-    double time_a, time_b;
-
-    /*
-    // about 0.11 sec for full update of 2^28-bit blob
-    time_a = timestamp();
-    ch0_mips.update(blob, 0);
-    time_b = timestamp();
-    printf("update took %12.6f\n", time_b - time_a);
-    */
-
-
     time_a = timestamp();
     for (int i = 0; i < 8; i++) {
-      mips[i].render(blob, i, bar_min, bar_max, view_min, view_max, traces[i], WINDOW_WIDTH);
+      render(trace, mips[i], i, bar_min, bar_max, view_min, view_max, traces[i], WINDOW_WIDTH);
     }
     time_b = timestamp();
-    printf("render took %12.6f\n", time_b - time_a);
-    //fflush(stdout);
+    printf("render trace took %12.6f\n", time_b - time_a);
 
     //----------
     // Render
@@ -208,7 +214,6 @@ int main(int argc, char* argv[]) {
     uint32_t* pixels;
     int pitch;
     SDL_LockTexture(texture, NULL, (void**) & pixels, &pitch);
-    //printf("pitch %d\n", pitch);
 
     // sRGB conversion
     for (int i = 0; i < 8; i++) {
@@ -234,7 +239,7 @@ int main(int argc, char* argv[]) {
 
     SDL_UnlockTexture(texture);
     time_b = timestamp();
-    printf("render took %12.6f\n", time_b - time_a);
+    printf("render view took %12.6f\n", time_b - time_a);
 
     //----------
     // Swap

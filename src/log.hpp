@@ -7,7 +7,12 @@
 //------------------------------------------------------------------------------
 
 double timestamp();
+
 void log(const char* format, ...);
+void log_r(const char* format, ...);
+void log_g(const char* format, ...);
+void log_b(const char* format, ...);
+
 void err(const char* format, ...);
 
 void log_draw_imgui(const char* title);

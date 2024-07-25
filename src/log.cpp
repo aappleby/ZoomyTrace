@@ -42,6 +42,24 @@ void log(const char* format, ...) {
   log_color(0x00CCCCCC, format, args);
 }
 
+void log_r(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  log_color(0x008888CC, format, args);
+}
+
+void log_g(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  log_color(0x0088CC88, format, args);
+}
+
+void log_b(const char* format, ...) {
+  va_list args;
+  va_start(args, format);
+  log_color(0x00CC8888, format, args);
+}
+
 void err(const char* format, ...) {
   va_list args;
   va_start(args, format);

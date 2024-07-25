@@ -9,7 +9,7 @@
       "type": "cppdbg",
       "request": "launch",
       "cwd": "${workspaceFolder}",
-      //"program": "${workspaceFolder}/build/ZoomyTrace/zoomytrace2",
+      //"program": "${workspaceFolder}/build/ZoomyTrace/zoomytest",
       "program": "${workspaceFolder}/build/ZoomyTrace/zoomytrace",
       "logging": {
         "moduleLoad": false,

@@ -1,11 +1,9 @@
 #include "main.hpp"
 
-#include "BitMips.hpp"
+#include "Bits.hpp"
 #include "capture.hpp"
 #include "GLBase.h"
 #include "log.hpp"
-#include "BitBlob.hpp"
-#include "BitMips.hpp"
 
 #include "symlinks/glad/glad.h"
 #include "symlinks/imgui/imgui.h"
@@ -21,30 +19,33 @@ extern std::string log_buf;
 
 void gen_pattern(void* buf, size_t sample_count) {
 
-  printf("generating pattern\n");
-
-  auto time_a = timestamp();
-
   uint8_t* bits = (uint8_t*)buf;
 
   uint32_t x = 1;
   for (size_t i = 0; i < sample_count; i++) {
 
+    //bits[i + 0] = 0b00000001;
+    //bits[i + 1] = 0b00000000;
+    //bits[i + 2] = 0b00000000;
+    //bits[i + 3] = 0b01111110;
+
     //bits[i] = i;
 
+    size_t t = i;
+    t = t*((t>>9|t>>13)&25&t>>6);
+    bits[i] = t;
+
     //size_t t = i;
-    //t = t*((t>>9|t>>13)&25&t>>6);
+    //t *= 0x23456789;
+    //t ^= (t >> 45);
+    //t *= 0x23456789;
+    //t ^= (t >> 45);
     //bits[i] = t;
 
-    size_t t = i;
-    t *= 0x23456789;
-    t ^= (t >> 45);
-    t *= 0x23456789;
-    t ^= (t >> 45);
-    bits[i] = t;
+    //bits[i] = rng();
+    //bits[i] = i >> 24;
   }
 
-  printf("generating pattern done in %12.8f sec\n", timestamp() - time_a);
 }
 
 //------------------------------------------------------------------------------
@@ -52,10 +53,12 @@ void gen_pattern(void* buf, size_t sample_count) {
 void Main::init() {
   log("ZoomyTrace init");
 
-  ring = new RingBuffer(8ull * 1024ull * 1024ull);
+  double time_a, time_b;
+
+  //ring = new RingBuffer(8ull * 1024ull * 1024ull);
   //ring = new RingBuffer(64ull * 1024ull);
 
-  memset(ring->buffer, 0, ring->buffer_len);
+  //memset(ring->buffer, 0, ring->buffer_len);
 
   cap = new Capture();
   cap->start_thread();
@@ -65,24 +68,107 @@ void Main::init() {
   initial_screen_h = 1080;
   window = create_gl_window("Logicdump", initial_screen_w, initial_screen_h);
 
+  //----------
+  // GL up
+
+  //
+
+  {
+    int wgc_x = 0;
+    int wgc_y = 0;
+    int wgc_z = 0;
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 0, &wgc_x);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 1, &wgc_y);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_COUNT, 2, &wgc_z);
+    log("Workgroup count %d %d %d", wgc_x, wgc_y, wgc_z);
+
+    int wgs_x = 0;
+    int wgs_y = 0;
+    int wgs_z = 0;
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 0, &wgs_x);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 1, &wgs_y);
+    glGetIntegeri_v(GL_MAX_COMPUTE_WORK_GROUP_SIZE, 2, &wgs_z);
+    log("Workgroup size %d %d %d", wgs_x, wgs_y, wgs_z);
+
+    int wg_inv = 0;
+    glGetIntegerv(GL_MAX_COMPUTE_WORK_GROUP_INVOCATIONS, &wg_inv);
+    log("Workgroup invocations %d", wg_inv);
+  }
+
+
+  //static constexpr size_t sample_count  = 64ull*1024ull;
+  //static constexpr size_t channel_count = 8;
+
+  //trace.samples  = 4ull*1024ull*1024ull*1024ull - (128*128*128*128);
+  //trace.samples  = 128*128*128*128;
+  trace.samples  = 65536;
+  trace.channels = 8;
+  trace.stride   = 8;
+  trace.ssbo_len = (trace.samples * trace.stride + 7) / 8;
+  trace.ssbo     = create_ssbo(trace.ssbo_len);
+  trace.blob     = map_ssbo(trace.ssbo, trace.ssbo_len);
+
   blit.init();
   trace_painter.init();
 
-  blob = new BitBlob();
-  blob->channels = 8;
-  blob->sample_count = ring->buffer_len;
-  blob->stride = 8;
-  blob->bits_len = ring->buffer_len;
-  blob->bits = ring->buffer;
+  trace_mipper.init();
+  trace_mipper.run(0, 0);
 
-  gen_pattern(blob->bits, blob->sample_count);
+  uint8_t* pattern = new uint8_t[trace.ssbo_len];
+  log("generating pattern");
+  time_a = timestamp();
+  gen_pattern(pattern, trace.ssbo_len);
+  time_b = timestamp();
+  log("generating pattern done in %12.8f sec", time_b - time_a);
 
+  time_a = timestamp();
+  memcpy(trace.blob, pattern, trace.ssbo_len);
+  time_b = timestamp();
+  log("pattern copied to trace ssbo in %f", time_b - time_a);
+
+  size_t mip1_len = (trace.samples + 127) / 128;
+  size_t mip2_len = (mip1_len + 127) / 128;
+  size_t mip3_len = (mip2_len + 127) / 128;
+  size_t mip4_len = (mip3_len + 127) / 128;
+
+  log("mip chain %ld %ld %ld %ld", mip1_len, mip2_len, mip3_len, mip4_len);
+
+  size_t mip1_align = (mip1_len + 127) & ~127;
+  size_t mip2_align = (mip2_len + 127) & ~127;
+  size_t mip3_align = (mip3_len + 127) & ~127;
+  size_t mip4_align = (mip4_len + 127) & ~127;
+
+  size_t mip_total = mip1_align + mip2_align + mip3_align + mip4_align;
+
+  time_a = timestamp();
   for (int i = 0; i < 8; i++) {
-    mips[i] = new BitMips();
-    mips[i]->update_mips(*blob, 1);
-  }
+    mips[i].samples = trace.samples;
 
-  cap->ring = ring;
+    mips[i].ssbo_len = mip_total;
+    mips[i].ssbo = create_ssbo(mip_total);
+
+    mips[i].mip1 = (uint8_t*)map_ssbo(mips[i].ssbo, mips[i].ssbo_len);
+    mips[i].mip2 = mips[i].mip1 + mip1_align;
+    mips[i].mip3 = mips[i].mip2 + mip2_align;
+    mips[i].mip4 = mips[i].mip3 + mip3_align;
+
+    mips[i].mip1_len = mip1_len;
+    mips[i].mip2_len = mip2_len;
+    mips[i].mip3_len = mip3_len;
+    mips[i].mip4_len = mip4_len;
+
+    mips[i].mip1_offset = 0;
+    mips[i].mip2_offset = mip1_align;
+    mips[i].mip3_offset = mip1_align + mip2_align;
+    mips[i].mip4_offset = mip1_align + mip2_align + mip3_align;
+
+    auto old_blob = trace.blob;
+    trace.blob = pattern;
+    update_mips(trace, i, 0, trace.samples, mips[i]);
+    trace.blob = old_blob;
+  }
+  time_b = timestamp();
+  log("generating mips done in %12.8f sec", time_b - time_a);
 
   vcon.init({initial_screen_w, initial_screen_h});
 
@@ -94,6 +180,18 @@ void Main::init() {
   old_now = timestamp();
   new_now = timestamp();
   frame = -1;
+
+  delete [] pattern;
+}
+
+//------------------------------------------------------------------------------
+
+void Main::exit() {
+  unmap_ssbo(trace.ssbo);
+  cap->stop_thread();
+  delete cap;
+  trace_painter.exit();
+  log("ZoomyTrace exit");
 }
 
 //------------------------------------------------------------------------------
@@ -101,7 +199,7 @@ void Main::init() {
 void Main::update() {
 
   SDL_GL_GetDrawableSize((SDL_Window*)window, &screen_w, &screen_h);
-  dvec2 screen_size = { (double)screen_w, (double)screen_h };
+  screen_size = { (double)screen_w, (double)screen_h };
 
   mouse_buttons = SDL_GetMouseState(&mouse_x, &mouse_y);
   dvec2 mouse_pos_screen = { (double)mouse_x, (double)mouse_y };
@@ -182,15 +280,15 @@ void Main::update() {
         }
       }
       else if (event.key.keysym.sym == SDLK_MINUS) {
-        vcon.zoom(mouse_pos_screen, screen_size, -0.25);
+        vcon.zoom(mouse_pos_screen, screen_size, -0.25, 0);
       }
       else if (event.key.keysym.sym == SDLK_EQUALS) {
-        vcon.zoom(mouse_pos_screen, screen_size, 0.25);
+        vcon.zoom(mouse_pos_screen, screen_size, 0.25, 0);
       }
     }
 
     if (event.type == SDL_MOUSEWHEEL && !imgui_io.WantCaptureMouse) {
-      vcon.zoom(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick);
+      vcon.zoom(mouse_pos_screen, screen_size, double(event.wheel.y) * zoom_per_tick, 0);
     }
 
     if (event.type == SDL_MOUSEMOTION && !imgui_io.WantCaptureMouse) {
@@ -233,6 +331,11 @@ void Main::update_imgui() {
     ImGui::Text("view target snap %f %f %f %f\n", w2.x, w2.y, z2.x, z2.y);
     ImGui::Text("view smooth      %f %f %f %f\n", w3.x, w3.y, z3.x, z3.y);
     ImGui::Text("view smooth snap %f %f %f %f\n", w4.x, w4.y, z4.x, z4.y);
+
+    dvec2 world_min = vcon.view_target.world_min(screen_size);
+    dvec2 world_max = vcon.view_target.world_max(screen_size);
+
+    ImGui::Text("view width       %f\n",world_max.x - world_min.x);
   }
   ImGui::End();
 
@@ -258,13 +361,13 @@ void Main::update_imgui() {
   ImGui::Text("bulk_done       %d", (int)cap->bulk_done);
 
   if (ImGui::TreeNode("Ring Buffer Settings")) {
-    ImGui::Text("ring_buffer     %p", ring->buffer);
-    ImGui::Text("ring_size       %ld", ring->buffer_len);
+    //ImGui::Text("ring_buffer     %p", ring->buffer);
+    //ImGui::Text("ring_size       %ld", ring->buffer_len);
     //ImGui::Text("ring_chunk      %d", ring->chunk_size);
 
-    ImGui::Text("ring_read       %d", (int)ring->cursor_read );
-    ImGui::Text("ring_ready      %d", (int)ring->cursor_ready);
-    ImGui::Text("ring_write      %d", (int)ring->cursor_write);
+    ImGui::Text("ring_read       %d", (int)cursor_read );
+    ImGui::Text("ring_ready      %d", (int)cursor_ready);
+    ImGui::Text("ring_write      %d", (int)cursor_write);
 
     ImGui::TreePop();
   }
@@ -299,6 +402,7 @@ void Main::update_imgui() {
   ImGui::Text("frame      %06d", frame);
   ImGui::Text("frame rate %f", 1.0 / (new_now - old_now));
   ImGui::Text("frame time %f", new_now - old_now);
+  ImGui::Text("render time %f", render_time);
 
   {
       ImGui::Begin("log");
@@ -320,26 +424,37 @@ void Main::update_imgui() {
 
 //------------------------------------------------------------------------------
 
+double* temp = nullptr;
+
 void Main::render() {
+  if (temp == nullptr) {
+    temp = new double[1024*1024*8];
+  }
+
   glViewport(0, 0, screen_w, screen_h);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  for (int i = 0; i < 1024; i++) {
-    auto t = rng() & 0xFF;
-    trace_painter.mapped_buffers[0][i] = 0xFF000000 | (t << 0) | (t << 8) | (t << 16);
+  /*
+  for (int i = 0; i < 8; i++) {
+    mips[i] = new BitMips();
+    mips[i]->update_mips(*blob, i, 0, blob->sample_count);
   }
+  */
 
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, trace_painter.trace_ssbos[0]);
+  glBindBuffer(GL_SHADER_STORAGE_BUFFER, trace.ssbo);
   glFlushMappedBufferRange(GL_SHADER_STORAGE_BUFFER, 0, 1024);
 
-  //{
-  //  auto len = std::min(ring->buffer_len, trace_painter.mapped_len);
-  //  memcpy(trace_painter.mapped_buffer, ring->buffer, len);
-  //}
-
-
-  dvec2 screen_size = { (double)screen_w, (double)screen_h };
-  trace_painter.blit(vcon.view_smooth_snap, screen_size, 0, 100, 2048, 64);
+  auto time_a = timestamp();
+  int cursor_y = 64;
+  for (int channel = 0; channel < 8; channel++) {
+    trace_painter.blit(
+      vcon.view_smooth_snap, screen_size,
+      0, cursor_y, 1920, 64,
+      trace, mips[channel], channel);
+    cursor_y += 96;
+  }
+  auto time_b = timestamp();
+  render_time = time_b - time_a;
 
   gui.render_gl(window);
 
@@ -348,23 +463,14 @@ void Main::render() {
 
 //------------------------------------------------------------------------------
 
-void Main::exit() {
-  cap->stop_thread();
-  delete cap;
-  trace_painter.exit();
-  log("ZoomyTrace exit");
-}
-
-//------------------------------------------------------------------------------
-
 int main(int argc, char** argv) {
   Main m;
   m.init();
 
-  while (!m.quit) {
-    m.update();
-    m.render();
-  }
+  //while (!m.quit) {
+  //  m.update();
+  //  m.render();
+  //}
 
   m.exit();
   return 0;

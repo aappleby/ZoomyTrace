@@ -1,130 +1,87 @@
-#include "BitMips.hpp"
+#include "Bits.hpp"
 
 #include "log.hpp"
-#include <stdio.h>
-#include <assert.h>
 
 //------------------------------------------------------------------------------
 
-BitMips::BitMips() {
-  sample_count = 0;
-  mip1_len = 0;
-  mip2_len = 0;
-  mip3_len = 0;
-  mip4_len = 0;
+void generate_mip1(void* blob, size_t samples, size_t channels, size_t stride, int mip_channel, uint8_t* out) {
+  uint32_t* words = (uint32_t*)blob;
 
-  size_t max_sample_count = (1 << 28);
-
-  size_t max_mip1_len = (max_sample_count + 127) / 128;
-  mip1 = new uint8_t[max_mip1_len];
-
-  size_t max_mip2_len = (max_mip1_len + 127) / 128;
-  mip2 = new uint8_t[max_mip2_len];
-
-  size_t max_mip3_len = (max_mip2_len + 127) / 128;
-  mip3 = new uint8_t[max_mip3_len];
-
-  size_t max_mip4_len = (max_mip3_len + 127) / 128;
-  mip4 = new uint8_t[max_mip4_len];
-}
-
-BitMips::~BitMips() {
-  //delete [] bits;
-  delete [] mip1;
-  delete [] mip2;
-  delete [] mip3;
-  delete [] mip4;
+  for (size_t i = 0; i < samples / 128; i++) {
+    int total = 0;
+    for (size_t j = 0; j < 128; j++) {
+      size_t index = (i * 128 + j) * stride + mip_channel;
+      total += (words[index >> 5] >> (index & 31)) & 1;
+    }
+    out[i] = total;
+  }
 }
 
 //------------------------------------------------------------------------------
 
-void BitMips::update_mips(BitBlob& blob, int channel) {
+void update_mips(TraceBuffer& trace, int channel, size_t sample_min, size_t sample_max, MipBuffer& mips) {
+  auto mip1_min = (sample_min +   0) >> 7;
+  auto mip1_max = (sample_max + 127) >> 7;
 
-  auto bits = blob.bits;
-  this->sample_count = blob.sample_count;
-  size_t bits_len = sample_count / 8;
-
-  // round totals *up* so that we don't mark a sparse mip as completely empty.
-  mip1_len = (sample_count + 127) / 128;
-  mip2_len = (mip1_len + 127) / 128;
-  mip3_len = (mip2_len + 127) / 128;
-  mip4_len = (mip3_len + 127) / 128;
-
-  //----------
-  // update mip1
-
-  {
-    size_t cursor = 0;
-    for (size_t i = 0; i < mip1_len; i++) {
-
-      int total = 0;
-      for (size_t j = 0; j < 128; j++) {
-        total += blob.get_bit(channel, i * 128 + j);
-        if (cursor == sample_count) break;
-      }
-
-      mip1[i] = total;
-      if (cursor == sample_count) break;
+  for (size_t i = mip1_min; i < mip1_max; i++) {
+    int total = 0;
+    for (size_t j = 0; j < 128; j++) {
+      auto index = i * 128 + j;
+      if (index >= trace.samples) break;
+      total += trace.get_bit(channel, index);
     }
+    mips.mip1[i] = total;
   }
 
-  //----------
-  // update mip2
+  auto mip2_min = (mip1_min +   0) >> 7;
+  auto mip2_max = (mip1_max + 127) >> 7;
 
-  {
-    size_t cursor = 0;
-    for (size_t i = 0; i < mip2_len; i++) {
-      int total = 0;
-      for (size_t j = 0; j < 128; j++) {
-        total += mip1[cursor++];
-        if (cursor == mip1_len) break;
-      }
-      mip2[i] = (total + 127) >> 7;
-      if (cursor == mip1_len) break;
+  for (size_t i = mip2_min; i < mip2_max; i++) {
+    int total = 0;
+    for (size_t j = 0; j < 128; j++) {
+      auto index = i * 128 + j;
+      if (index >= mips.mip1_len) break;
+      total += mips.mip1[index];
     }
+    mips.mip2[i] = (total + 127) >> 7;
   }
 
-  //----------
-  // update mip3
+  auto mip3_min = (mip2_min +   0) >> 7;
+  auto mip3_max = (mip2_max + 127) >> 7;
 
-  {
-    size_t cursor = 0;
-    for (size_t i = 0; i < mip3_len; i++) {
-      int total = 0;
-      for (size_t j = 0; j < 128; j++) {
-        total += mip2[cursor++];
-        if (cursor == mip2_len) break;
-      }
-      mip3[i] = (total + 127) >> 7;
-      if (cursor == mip2_len) break;
+  for (size_t i = mip3_min; i < mip3_max; i++) {
+    int total = 0;
+    for (size_t j = 0; j < 128; j++) {
+      auto index = i * 128 + j;
+      if (index >= mips.mip2_len) break;
+      total += mips.mip2[i * 128 + j];
     }
+    mips.mip3[i] = (total + 127) >> 7;
   }
 
-  //----------
-  // update mip4
+  auto mip4_min = (mip3_min +   0) >> 7;
+  auto mip4_max = (mip3_max + 127) >> 7;
 
-  {
-    size_t cursor = 0;
-    for (size_t i = 0; i < mip4_len; i++) {
-      int total = 0;
-      for (int j = 0; j < 128; j++) {
-        total += mip3[cursor++];
-        if (cursor == mip3_len) break;
-      }
-      mip4[i] = (total + 127) >> 7;
-      if (cursor == mip3_len) break;
+  for (size_t i = mip4_min; i < mip4_max; i++) {
+    int total = 0;
+    for (int j = 0; j < 128; j++) {
+      auto index = i * 128 + j;
+      if (index >= mips.mip3_len) break;
+      total += mips.mip3[i * 128 + j];
     }
+    mips.mip4[i] = (total + 127) >> 7;
   }
 }
-
 
 //------------------------------------------------------------------------------
 
 //#pragma GCC optimize("O0")
-void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max, double view_min, double view_max, double* filtered, int window_width) {
-
-  uint8_t* bits = blob.bits;
-
+void render(
+  TraceBuffer& trace, MipBuffer& mips, int channel,
+  double world_min, double world_max,
+  double trace_min, double trace_max,
+  double* out, int out_len)
+{
   const uint64_t mip0_shift =  0;
   const uint64_t mip1_shift =  7;
   const uint64_t mip2_shift = 14;
@@ -149,41 +106,41 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
   const uint64_t mip3_weight = 128 * 128 * 128;
   const uint64_t mip4_weight = 128 * 128 * 128 * 128;
 
-  // We compute a "granularity" based on the width of each pixel in trace-space
+  // We compute a "granularity" based on the width of each pixel in trace space
   // so that we can reduce the precision of the span endpoints and skip lower
   // mips when they wouldn't contribute to the final value much. 7 here means
   // 1/128-subpixel precision.
-  double pix0_l = remap(0.0, bar_min, bar_max, view_min, view_max);
-  double pix0_r = remap(1.0, bar_min, bar_max, view_min, view_max);
+
+  // FIXME - use samples_per_pixel or something
+  double pix0_l = remap(0.0, world_min, world_max, trace_min, trace_max);
+  double pix0_r = remap(1.0, world_min, world_max, trace_min, trace_max);
   double granularity = exp2(ceil(log2(pix0_r - pix0_l)) - 7);
   double igranularity = 1.0 / granularity;
 
-  uint32_t* dwords = (uint32_t*)bits;
+  mips.mip0_hit = 0;
+  mips.mip1_hit = 0;
+  mips.mip2_hit = 0;
+  mips.mip3_hit = 0;
+  mips.mip4_hit = 0;
 
-  int mip0_hit = 0;
-  int mip1_hit = 0;
-  int mip2_hit = 0;
-  int mip3_hit = 0;
-  int mip4_hit = 0;
-
-  for (int x = 0; x < window_width; x++) {
-    filtered[x] = 0;
+  for (int x = 0; x < out_len; x++) {
+    out[x] = 0;
 
     double pixel_center = x + 0.5;
 
-    double sample_fmin = remap(pixel_center - 0.5, bar_min, bar_max, view_min, view_max);
-    double sample_fmax = remap(pixel_center + 0.5, bar_min, bar_max, view_min, view_max);
+    double sample_fmin = remap(pixel_center - 0.5, world_min, world_max, trace_min, trace_max);
+    double sample_fmax = remap(pixel_center + 0.5, world_min, world_max, trace_min, trace_max);
 
     // If the span is really large, ditch some precision from the end bits so
     // we don't bother with head/tail samples that don't contribute to the sum
     sample_fmin = floor(sample_fmin * igranularity) * granularity;
     sample_fmax = floor(sample_fmax * igranularity) * granularity;
 
-    if (sample_fmin < 0)            sample_fmin = 0;
-    if (sample_fmax > sample_count) sample_fmax = sample_count;
+    if (sample_fmin < 0)             sample_fmin = 0;
+    if (sample_fmax > trace.samples) sample_fmax = trace.samples;
 
-    if (sample_fmax < 0)             { filtered[x] = 0; continue; }
-    if (sample_fmin >= sample_count) { filtered[x] = 0; continue; }
+    if (sample_fmax < 0)              { out[x] = 0; continue; }
+    if (sample_fmin >= trace.samples) { out[x] = 0; continue; }
 
     //----------------------------------------
     // Samples coords start as 32.7 fixed point, 7 bit subpixel precision
@@ -193,8 +150,8 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
 
     // Both endpoints are inside the same sample.
     if ((sample_imin >> 7) == (sample_imax >> 7)) {
-      filtered[x] = blob.get_bit(channel, sample_imin >> 7);
-      mip0_hit++;
+      out[x] = trace.get_bit(channel, sample_imin >> 7);
+      mips.mip0_hit++;
       continue;
     }
 
@@ -204,21 +161,21 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
     // Add the contribution from the fractional portion of the first sample.
     if (sample_imin & 0x7F) {
       double head_fract = 128 - (sample_imin & 0x7F);
-      total += head_fract * blob.get_bit(channel, sample_imin >> 7);
+      total += head_fract * trace.get_bit(channel, sample_imin >> 7);
       sample_imin = (sample_imin + 0x7F) & ~0x7F;
-      mip0_hit++;
+      mips.mip0_hit++;
     }
 
     // Add the contribution from the fractional portion of the last sample.
     if (sample_imax & 0x7F) {
       double tail_fract = sample_imax & 0x7F;
-      total += tail_fract * blob.get_bit(channel, sample_imax >> 7);
+      total += tail_fract * trace.get_bit(channel, sample_imax >> 7);
       sample_imax = sample_imax & ~0x7F;
-      mip0_hit++;
+      mips.mip0_hit++;
     }
 
     if (sample_imin == sample_imax) {
-      filtered[x] = double(total) / double(sample_ilen);
+      out[x] = double(total) / double(sample_ilen);
       continue;
     }
 
@@ -233,19 +190,19 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
 
     if ((sample_imin & mip0_mask) || (sample_imax & mip0_mask)) {
       while ((sample_imin & mip0_mask) && (sample_imin < sample_imax)) {
-        total += blob.get_bit(channel, sample_imin >> mip0_shift) * mip0_weight;
+        total += trace.get_bit(channel, sample_imin >> mip0_shift) * mip0_weight;
         sample_imin += mip0_size;
-        mip0_hit++;
+        mips.mip0_hit++;
       }
 
       while ((sample_imax & mip0_mask) && (sample_imin < sample_imax)) {
-        total += blob.get_bit(channel, (sample_imax - 1) >> mip0_shift) * mip0_weight;
+        total += trace.get_bit(channel, (sample_imax - 1) >> mip0_shift) * mip0_weight;
         sample_imax -= mip0_size;
-        mip0_hit++;
+        mips.mip0_hit++;
       }
 
       if (sample_imin == sample_imax) {
-        filtered[x] = double(total) / double(sample_ilen);
+        out[x] = double(total) / double(sample_ilen);
         continue;
       }
 
@@ -258,19 +215,19 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
 
     if ((sample_imin & mip1_mask) || (sample_imax & mip1_mask)) {
       while ((sample_imin & mip1_mask) && (sample_imin < sample_imax)) {
-        total += mip1[sample_imin >> mip1_shift] * mip1_weight;
+        total += mips.mip1[sample_imin >> mip1_shift] * mip1_weight;
         sample_imin += mip1_size;
-        mip1_hit++;
+        mips.mip1_hit++;
       }
 
       while ((sample_imax & mip1_mask) && (sample_imin < sample_imax)) {
-        total += mip1[(sample_imax - 1) >> mip1_shift] * mip1_weight;
+        total += mips.mip1[(sample_imax - 1) >> mip1_shift] * mip1_weight;
         sample_imax -= mip1_size;
-        mip1_hit++;
+        mips.mip1_hit++;
       }
 
       if (sample_imin == sample_imax) {
-        filtered[x] = double(total) / double(sample_ilen);
+        out[x] = double(total) / double(sample_ilen);
         continue;
       }
 
@@ -283,19 +240,19 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
 
     if ((sample_imin & mip2_mask) || (sample_imax & mip2_mask)) {
       while ((sample_imin & mip2_mask) && (sample_imin < sample_imax)) {
-        total += mip2[sample_imin >> mip2_shift] * mip2_weight;
+        total += mips.mip2[sample_imin >> mip2_shift] * mip2_weight;
         sample_imin += mip2_size;
-        mip2_hit++;
+        mips.mip2_hit++;
       }
 
       while ((sample_imax & mip2_mask) && (sample_imin < sample_imax)) {
-        total += mip2[(sample_imax - 1) >> mip2_shift] * mip2_weight;
+        total += mips.mip2[(sample_imax - 1) >> mip2_shift] * mip2_weight;
         sample_imax -= mip2_size;
-        mip2_hit++;
+        mips.mip2_hit++;
       }
 
       if (sample_imin == sample_imax) {
-        filtered[x] = double(total) / double(sample_ilen);
+        out[x] = double(total) / double(sample_ilen);
         continue;
       }
 
@@ -308,19 +265,19 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
 
     if ((sample_imin & mip3_mask) || (sample_imax & mip3_mask)) {
       while ((sample_imin & mip3_mask) && (sample_imin < sample_imax)) {
-        total += mip3[sample_imin >> mip3_shift] * mip3_weight;
+        total += mips.mip3[sample_imin >> mip3_shift] * mip3_weight;
         sample_imin += mip3_size;
-        mip3_hit++;
+        mips.mip3_hit++;
       }
 
       while ((sample_imax & mip3_mask) && (sample_imin < sample_imax)) {
-        total += mip3[(sample_imax - 1) >> mip3_shift] * mip3_weight;
+        total += mips.mip3[(sample_imax - 1) >> mip3_shift] * mip3_weight;
         sample_imax -= mip3_size;
-        mip3_hit++;
+        mips.mip3_hit++;
       }
 
       if (sample_imin == sample_imax) {
-        filtered[x] = double(total) / double(sample_ilen);
+        out[x] = double(total) / double(sample_ilen);
         continue;
       }
 
@@ -332,36 +289,34 @@ void BitMips::render(BitBlob& blob, int channel, double bar_min, double bar_max,
     // Endpoints are now multiples of mip4_size
 
     while (sample_imin < sample_imax) {
-      total += mip4[sample_imin >> mip4_shift] * mip4_weight;
+      total += mips.mip4[sample_imin >> mip4_shift] * mip4_weight;
       sample_imin += mip4_size;
-      mip4_hit++;
+      mips.mip4_hit++;
     }
 
     //----------------------------------------
     // Done
 
-    filtered[x] = double(total) / double(sample_ilen);
+    out[x] = double(total) / double(sample_ilen);
   }
-
-  //printf("mip0_hit %d\n", mip0_hit);
-  //printf("mip1_hit %d\n", mip1_hit);
-  //printf("mip2_hit %d\n", mip2_hit);
-  //printf("mip3_hit %d\n", mip3_hit);
-  //printf("mip4_hit %d\n", mip4_hit);
 }
 
 //------------------------------------------------------------------------------
 
+#if 0
 void BitMips::dump() {
   assert(!(sample_count & 127));
 
-  //printf("samples  %ld\n", sample_count);
-  //printf("bits_len %ld\n", bits_len);
-  printf("mip1_len %ld\n", mip1_len);
-  printf("mip2_len %ld\n", mip2_len);
-  printf("mip3_len %ld\n", mip3_len);
-  printf("mip4_len %ld\n", mip4_len);
-  printf("\n");
+  printf("samples  %ld\n", sample_count);
+  //printf("mip1_len %ld\n", mip1_len);
+  //printf("mip2_len %ld\n", mip2_len);
+  //printf("mip3_len %ld\n", mip3_len);
+  //printf("mip4_len %ld\n", mip4_len);
+
+  size_t mip1_len = (sample_count + 127) / 128;
+  size_t mip2_len = (mip1_len + 127) / 128;
+  size_t mip3_len = (mip2_len + 127) / 128;
+  size_t mip4_len = (mip3_len + 127) / 128;
 
   {
     printf("mip1:\n");
@@ -431,5 +386,6 @@ void BitMips::dump() {
     printf("\n");
   }
 }
+#endif
 
 //------------------------------------------------------------------------------

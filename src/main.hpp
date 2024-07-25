@@ -3,8 +3,10 @@
 #include "ViewController.hpp"
 #include "Blitter.hpp"
 #include "TracePainter.hpp"
-#include "RingBuffer.hpp"
 #include <SDL2/SDL.h>
+#include <atomic>
+#include <stdint.h>
+#include "TraceMipper.hpp"
 
 struct Capture;
 struct SDL_Window;
@@ -29,7 +31,12 @@ public:
   double delta_time;
   ViewController vcon;
   Blitter blit;
+
   TracePainter trace_painter;
+  TraceMipper  trace_mipper;
+
+
+
   int screen_w = 0;
   int screen_h = 0;
   int mouse_x = 0;
@@ -45,7 +52,20 @@ public:
   SDL_DisplayMode display_mode;
   SDL_Event events[256];
 
-  BitBlob* blob;
-  BitMips* mips[8];
-  RingBuffer* ring;
+  // DMA ring buffer size seems to be limited to 8 megs (128 chunks)
+  //int chunk_size  = 65536;
+  //int chunk_count = 128;
+  //int ring_size   = 65536 * 128;
+  //int ring_mask   = (65536 * 128) - 1;
+
+  dvec2 screen_size;
+
+  TraceBuffer trace;
+  MipBuffer   mips[8];
+
+  std::atomic_int cursor_read  = 0;
+  std::atomic_int cursor_ready = 0;
+  std::atomic_int cursor_write = 0;
+
+  double render_time;
 };

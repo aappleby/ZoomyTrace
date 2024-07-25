@@ -9,7 +9,7 @@ compile = hancho.Command(
 
   opt = "-O0",
   #opt = "-O3",
-  warnings = "-Wall -Werror -Wno-deprecated-enum-enum-conversion -Wno-unused-variable",
+  warnings = "-Wall -Werror -Wno-deprecated-enum-enum-conversion -Wno-unused-variable -Wno-unused-but-set-variable",
   out_obj  = "{swap_ext(in_src, '.o')}",
   depfile  = "{swap_ext(in_src, '.d')}",
 )
@@ -23,7 +23,7 @@ link = hancho.Command(
 imgui_o = [compile(in_src = f) for f in glob.glob("symlinks/imgui/*.cpp")]
 
 objs = [
-  compile(in_src = "src/BitMips.cpp"),
+  compile(in_src = "src/Bits.cpp"),
   compile(in_src = "src/Blitter.cpp"),
   compile(in_src = "src/capture.cpp"),
   compile(in_src = "src/firmware.cpp"),
@@ -35,6 +35,7 @@ objs = [
   compile(in_src = "src/ViewController.cpp"),
   compile(in_src = "symlinks/glad/glad.c"),
   compile(in_src = "src/TracePainter.cpp"),
+  compile(in_src = "src/TraceMipper.cpp"),
 ]
 
 main = link(
@@ -52,5 +53,5 @@ zoomy = link(
     imgui_o,
     objs
   ],
-  out_bin = "zoomytrace2",
+  out_bin = "zoomytest",
 )
