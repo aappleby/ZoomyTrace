@@ -32,6 +32,7 @@ void log_color(uint32_t color, const char* format, va_list args) {
   vsnprintf(temp_buf, sizeof(temp_buf), format, args2);
   log_buf += temp_buf;
   log_buf += "\n";
+  fflush(stdout);
 }
 
 //------------------------------------------------------------------------------

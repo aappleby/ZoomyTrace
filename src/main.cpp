@@ -63,10 +63,14 @@ void Main::init() {
   cap = new Capture();
   cap->start_thread();
 
+  log("Creating window");
+
   int initial_screen_w, initial_screen_h;
   initial_screen_w = 1920;
   initial_screen_h = 1080;
   window = create_gl_window("Logicdump", initial_screen_w, initial_screen_h);
+
+  log("Window up");
 
   //----------
   // GL up
@@ -101,74 +105,19 @@ void Main::init() {
 
   //trace.samples  = 4ull*1024ull*1024ull*1024ull - (128*128*128*128);
   //trace.samples  = 128*128*128*128;
-  trace.samples  = 65536;
-  trace.channels = 8;
-  trace.stride   = 8;
-  trace.ssbo_len = (trace.samples * trace.stride + 7) / 8;
-  trace.ssbo     = create_ssbo(trace.ssbo_len);
-  trace.blob     = map_ssbo(trace.ssbo, trace.ssbo_len);
+
+  //trace.samples  = 65536;
+  //trace.channels = 8;
+  //trace.stride   = 8;
+  //trace.ssbo_len = (trace.samples * trace.stride + 7) / 8;
+  //trace.ssbo     = create_ssbo(trace.ssbo_len);
+  //trace.blob     = map_ssbo(trace.ssbo, trace.ssbo_len);
 
   blit.init();
   trace_painter.init();
 
   trace_mipper.init();
   trace_mipper.run(0, 0);
-
-  uint8_t* pattern = new uint8_t[trace.ssbo_len];
-  log("generating pattern");
-  time_a = timestamp();
-  gen_pattern(pattern, trace.ssbo_len);
-  time_b = timestamp();
-  log("generating pattern done in %12.8f sec", time_b - time_a);
-
-  time_a = timestamp();
-  memcpy(trace.blob, pattern, trace.ssbo_len);
-  time_b = timestamp();
-  log("pattern copied to trace ssbo in %f", time_b - time_a);
-
-  size_t mip1_len = (trace.samples + 127) / 128;
-  size_t mip2_len = (mip1_len + 127) / 128;
-  size_t mip3_len = (mip2_len + 127) / 128;
-  size_t mip4_len = (mip3_len + 127) / 128;
-
-  log("mip chain %ld %ld %ld %ld", mip1_len, mip2_len, mip3_len, mip4_len);
-
-  size_t mip1_align = (mip1_len + 127) & ~127;
-  size_t mip2_align = (mip2_len + 127) & ~127;
-  size_t mip3_align = (mip3_len + 127) & ~127;
-  size_t mip4_align = (mip4_len + 127) & ~127;
-
-  size_t mip_total = mip1_align + mip2_align + mip3_align + mip4_align;
-
-  time_a = timestamp();
-  for (int i = 0; i < 8; i++) {
-    mips[i].samples = trace.samples;
-
-    mips[i].ssbo_len = mip_total;
-    mips[i].ssbo = create_ssbo(mip_total);
-
-    mips[i].mip1 = (uint8_t*)map_ssbo(mips[i].ssbo, mips[i].ssbo_len);
-    mips[i].mip2 = mips[i].mip1 + mip1_align;
-    mips[i].mip3 = mips[i].mip2 + mip2_align;
-    mips[i].mip4 = mips[i].mip3 + mip3_align;
-
-    mips[i].mip1_len = mip1_len;
-    mips[i].mip2_len = mip2_len;
-    mips[i].mip3_len = mip3_len;
-    mips[i].mip4_len = mip4_len;
-
-    mips[i].mip1_offset = 0;
-    mips[i].mip2_offset = mip1_align;
-    mips[i].mip3_offset = mip1_align + mip2_align;
-    mips[i].mip4_offset = mip1_align + mip2_align + mip3_align;
-
-    auto old_blob = trace.blob;
-    trace.blob = pattern;
-    update_mips(trace, i, 0, trace.samples, mips[i]);
-    trace.blob = old_blob;
-  }
-  time_b = timestamp();
-  log("generating mips done in %12.8f sec", time_b - time_a);
 
   vcon.init({initial_screen_w, initial_screen_h});
 
@@ -180,14 +129,11 @@ void Main::init() {
   old_now = timestamp();
   new_now = timestamp();
   frame = -1;
-
-  delete [] pattern;
 }
 
 //------------------------------------------------------------------------------
 
 void Main::exit() {
-  unmap_ssbo(trace.ssbo);
   cap->stop_thread();
   delete cap;
   trace_painter.exit();
@@ -365,9 +311,9 @@ void Main::update_imgui() {
     //ImGui::Text("ring_size       %ld", ring->buffer_len);
     //ImGui::Text("ring_chunk      %d", ring->chunk_size);
 
-    ImGui::Text("ring_read       %d", (int)cursor_read );
-    ImGui::Text("ring_ready      %d", (int)cursor_ready);
-    ImGui::Text("ring_write      %d", (int)cursor_write);
+    //ImGui::Text("ring_read       %d", (int)cursor_read );
+    //ImGui::Text("ring_ready      %d", (int)cursor_ready);
+    //ImGui::Text("ring_write      %d", (int)cursor_write);
 
     ImGui::TreePop();
   }
@@ -427,9 +373,6 @@ void Main::update_imgui() {
 double* temp = nullptr;
 
 void Main::render() {
-  if (temp == nullptr) {
-    temp = new double[1024*1024*8];
-  }
 
   glViewport(0, 0, screen_w, screen_h);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
@@ -441,18 +384,20 @@ void Main::render() {
   }
   */
 
-  glBindBuffer(GL_SHADER_STORAGE_BUFFER, trace.ssbo);
-  glFlushMappedBufferRange(GL_SHADER_STORAGE_BUFFER, 0, 1024);
+  //glBindBuffer(GL_SHADER_STORAGE_BUFFER, trace.ssbo);
+  //glFlushMappedBufferRange(GL_SHADER_STORAGE_BUFFER, 0, 1024);
 
   auto time_a = timestamp();
-  int cursor_y = 64;
-  for (int channel = 0; channel < 8; channel++) {
-    trace_painter.blit(
-      vcon.view_smooth_snap, screen_size,
-      0, cursor_y, 1920, 64,
-      trace, mips[channel], channel);
-    cursor_y += 96;
-  }
+
+//  int cursor_y = 64;
+//  for (int channel = 0; channel < 8; channel++) {
+//    trace_painter.blit(
+//      vcon.view_smooth_snap, screen_size,
+//      0, cursor_y, 1920, 64,
+//      trace, mips[channel], channel);
+//    cursor_y += 96;
+//  }
+
   auto time_b = timestamp();
   render_time = time_b - time_a;
 
@@ -467,10 +412,10 @@ int main(int argc, char** argv) {
   Main m;
   m.init();
 
-  //while (!m.quit) {
-  //  m.update();
-  //  m.render();
-  //}
+  while (!m.quit) {
+    m.update();
+    m.render();
+  }
 
   m.exit();
   return 0;

@@ -29,12 +29,15 @@ public:
   double old_now;
   double new_now;
   double delta_time;
-  ViewController vcon;
-  Blitter blit;
 
+  ViewController vcon;
+  //double zoom_per_tick = 0.0625;
+  double zoom_per_tick = 0.25;
+  //double zoom_per_tick = 1.0;
+
+  Blitter blit;
   TracePainter trace_painter;
   TraceMipper  trace_mipper;
-
 
 
   int screen_w = 0;
@@ -44,9 +47,6 @@ public:
   int mouse_buttons = 0;
   bool quit = false;
   int frame = 0;
-  //double zoom_per_tick = 0.0625;
-  double zoom_per_tick = 0.25;
-  //double zoom_per_tick = 1.0;
   const uint8_t* keyboard_state;
   int key_count;
   SDL_DisplayMode display_mode;
@@ -59,13 +59,6 @@ public:
   //int ring_mask   = (65536 * 128) - 1;
 
   dvec2 screen_size;
-
-  TraceBuffer trace;
-  MipBuffer   mips[8];
-
-  std::atomic_int cursor_read  = 0;
-  std::atomic_int cursor_ready = 0;
-  std::atomic_int cursor_write = 0;
 
   double render_time;
 };

@@ -4,6 +4,10 @@
 #include <assert.h>
 #include <map>
 
+static bool is_nvidia = false;
+
+void log(const char* format, ...);
+
 //------------------------------------------------------------------------------
 
 void APIENTRY debugOutput(GLenum source, GLenum type, GLuint id, GLenum severity,
@@ -44,26 +48,36 @@ void APIENTRY debugOutput(GLenum source, GLenum type, GLuint id, GLenum severity
   // "will use VIDEO memory as the source..."
   if (id == 0x20071) return;
 
-  printf("GLDEBUG %.20s:%.20s:%.20s (0x%08x) %s\n",
+  log("GLDEBUG %.20s:%.20s:%.20s (0x%08x) %s",
     messageMap[source],
     messageMap[type],
     messageMap[severity],
     id,
     message);
+
+  if (type == GL_DEBUG_TYPE_ERROR) {
+    assert(false);
+  }
 }
 
 //------------------------------------------------------------------------------
 
 SDL_Window* create_gl_window(const char* name, int initial_screen_w, int initial_screen_h) {
-  SDL_Init(SDL_INIT_EVERYTHING);
+  log("SDL_Init()");
+  //SDL_Init(SDL_INIT_EVERYTHING);
+  SDL_Init(SDL_INIT_VIDEO);
+  log("SDL_Init() done");
+  fflush(stdout);
   //SDL_Init(SDL_INIT_VIDEO);
 
+  log("SDL_CreateWindow()");
   SDL_Window* window = SDL_CreateWindow(
     name,
     SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED,
     1920, 1080,
     SDL_WINDOW_RESIZABLE | SDL_WINDOW_OPENGL | SDL_WINDOW_ALLOW_HIGHDPI
   );
+  log("SDL_CreateWindow() done");
 
   SDL_GL_SetAttribute(SDL_GL_CONTEXT_FLAGS,
                       SDL_GL_CONTEXT_DEBUG_FLAG
@@ -79,12 +93,16 @@ SDL_Window* create_gl_window(const char* name, int initial_screen_w, int initial
   SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
   SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
 
+  log("SDL_GL_CreateContext()");
   SDL_GLContext gl_context = SDL_GL_CreateContext((SDL_Window*)window);
+  log("SDL_GL_CreateContext() done");
 
   SDL_GL_SetSwapInterval(1);  // Enable vsync
   //SDL_GL_SetSwapInterval(0); // Disable vsync
 
+  log("gladLoadGLLoader()");
   gladLoadGLLoader(SDL_GL_GetProcAddress);
+  log("gladLoadGLLoader() done");
 
   glEnable(GL_DEBUG_OUTPUT);
   glEnable(GL_DEBUG_OUTPUT_SYNCHRONOUS);
@@ -96,15 +114,19 @@ SDL_Window* create_gl_window(const char* name, int initial_screen_w, int initial
   int ext_count = 0;
   glGetIntegerv(GL_NUM_EXTENSIONS, &ext_count);
 
-  printf("Vendor:   "); printf("%s\n", glGetString(GL_VENDOR));
-  printf("Renderer: "); printf("%s\n", glGetString(GL_RENDERER));
-  printf("Version:  "); printf("%s\n", glGetString(GL_VERSION));
-  printf("GLSL:     "); printf("%s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
-  printf("Ext count "); printf("%d\n", ext_count);
+  auto vendor = (const char*)glGetString(GL_VENDOR);
+
+  if (strncmp(vendor, "NVIDIA", 6) == 0) is_nvidia = true;
+
+  log("Vendor:   %s", glGetString(GL_VENDOR));
+  log("Renderer: %s", glGetString(GL_RENDERER));
+  log("Version:  %s", glGetString(GL_VERSION));
+  log("GLSL:     %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
+  log("Ext count %d", ext_count);
 
 #if 0
   for (int i = 0; i < ext_count; i++) {
-    LOG_B("Ext %2d: %s\n", i, glGetStringi(GL_EXTENSIONS, i));
+    log("Ext %2d: %s", i, glGetStringi(GL_EXTENSIONS, i));
   }
 #endif
 
@@ -157,15 +179,15 @@ void* init_gl(void* window) {
   int ext_count = 0;
   glGetIntegerv(GL_NUM_EXTENSIONS, &ext_count);
 
-  printf("Vendor:   "); printf("%s\n", glGetString(GL_VENDOR));
-  printf("Renderer: "); printf("%s\n", glGetString(GL_RENDERER));
-  printf("Version:  "); printf("%s\n", glGetString(GL_VERSION));
-  printf("GLSL:     "); printf("%s\n", glGetString(GL_SHADING_LANGUAGE_VERSION));
-  printf("Ext count "); printf("%d\n", ext_count);
+  log("Vendor:   %s", glGetString(GL_VENDOR));
+  log("Renderer: %s", glGetString(GL_RENDERER));
+  log("Version:  %s", glGetString(GL_VERSION));
+  log("GLSL:     %s", glGetString(GL_SHADING_LANGUAGE_VERSION));
+  log("Ext count %d", ext_count);
 
 #if 0
   for (int i = 0; i < ext_count; i++) {
-    printf("Ext %2d: %s\n", i, glGetStringi(GL_EXTENSIONS, i));
+    log("Ext %2d: %s", i, glGetStringi(GL_EXTENSIONS, i));
   }
 #endif
 
@@ -189,7 +211,8 @@ void* init_gl(void* window) {
 void check_gl_error() {
   int err = glGetError();
   if (err) {
-    printf("glGetError %d\n", err);
+    log("glGetError %d", err);
+    assert(false);
   }
 }
 
@@ -439,7 +462,7 @@ void dump_shader_info(int program) {
   int count = 0;
 
   glGetProgramiv(program, GL_ACTIVE_ATTRIBUTES, &count);
-  printf("  Active Attributes: %d\n", count);
+  log("  Active Attributes: %d", count);
 
   for (int i = 0; i < count; i++) {
     const int bufSize = 16;
@@ -448,11 +471,11 @@ void dump_shader_info(int program) {
     GLsizei length;
     GLint size;
     glGetActiveAttrib(program, (GLuint)i, bufSize, &length, &size, &type, var_name);
-    printf("    Attribute #%d Type: %u Name: %s\n", i, type, var_name);
+    log("    Attribute #%d Type: %u Name: %s", i, type, var_name);
   }
 
   glGetProgramiv(program, GL_ACTIVE_UNIFORMS, &count);
-  printf("  Active Uniforms: %d\n", count);
+  log("  Active Uniforms: %d", count);
 
   for (int i = 0; i < count; i++) {
     const int bufSize = 16;
@@ -462,14 +485,14 @@ void dump_shader_info(int program) {
     GLint size;
     glGetActiveUniform(program, (GLuint)i, bufSize, &length, &size, &type, var_name);
     int loc = glGetUniformLocation(program, var_name);
-    printf("    Uniform '%16s' @ %2d Type: 0x%04x\n", var_name, loc, type);
+    log("    Uniform '%16s' @ %2d Type: 0x%04x", var_name, loc, type);
   }
 
   glGetProgramiv(program, GL_ATTACHED_SHADERS, &count);
-  printf("  Attached shaders: %d\n", count);
+  log("  Attached shaders: %d", count);
 
   glGetProgramiv(program, GL_ACTIVE_UNIFORM_BLOCKS, &count);
-  printf("  Uniform blocks: %d\n", count);
+  log("  Uniform blocks: %d", count);
 
   for (int i = 0; i < count; i++) {
     const int bufSize = 16;
@@ -477,27 +500,27 @@ void dump_shader_info(int program) {
     GLsizei length;
 
     glGetActiveUniformBlockName(program, i, bufSize, &length, var_name);
-    printf("  Uniform block #%d Name: %s\n", i, var_name);
+    log("  Uniform block #%d Name: %s", i, var_name);
 
     int temp[16];
 
     glGetActiveUniformBlockiv(program, i, GL_UNIFORM_BLOCK_BINDING, temp);
-    printf("    GL_UNIFORM_BLOCK_BINDING %d\n", temp[0]);
+    log("    GL_UNIFORM_BLOCK_BINDING %d", temp[0]);
 
     glGetActiveUniformBlockiv(program, i, GL_UNIFORM_BLOCK_DATA_SIZE, temp);
-    printf("    GL_UNIFORM_BLOCK_DATA_SIZE %d\n", temp[0]);
+    log("    GL_UNIFORM_BLOCK_DATA_SIZE %d", temp[0]);
 
     glGetActiveUniformBlockiv(program, i, GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS, temp);
-    printf("    GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS %d\n", temp[0]);
+    log("    GL_UNIFORM_BLOCK_ACTIVE_UNIFORMS %d", temp[0]);
 
     glGetActiveUniformBlockiv(program, i, GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER, temp);
-    printf("    GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER %d\n", temp[0]);
+    log("    GL_UNIFORM_BLOCK_REFERENCED_BY_VERTEX_SHADER %d", temp[0]);
 
     glGetActiveUniformBlockiv(program, i, GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER, temp);
-    printf("    GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER %d\n", temp[0]);
+    log("    GL_UNIFORM_BLOCK_REFERENCED_BY_FRAGMENT_SHADER %d", temp[0]);
 
     glGetActiveUniformBlockiv(program, i, GL_UNIFORM_BLOCK_REFERENCED_BY_COMPUTE_SHADER, temp);
-    printf("    GL_UNIFORM_BLOCK_REFERENCED_BY_COMPUTE_SHADER %d\n", temp[0]);
+    log("    GL_UNIFORM_BLOCK_REFERENCED_BY_COMPUTE_SHADER %d", temp[0]);
   }
 }
 
@@ -507,12 +530,11 @@ int create_shader(const char* name, const char* src) {
   static bool verbose = false;
   assert(!glGetError());
 
-  printf("Compiling %s\n", name);
+  log("Compiling %s", name);
 
   auto vert_srcs = {
     "#version 460 core\n",
-    //"#extension GL_NV_gpu_shader5 : enable\n",
-    "#extension GL_ARB_gpu_shader5 : enable\n",
+    "#extension GL_ARB_gpu_shader_int64 : enable\n",
     "precision highp float;\n",
     "precision highp int;\n",
     "precision highp usampler2D;\n",
@@ -531,11 +553,12 @@ int create_shader(const char* name, const char* src) {
     char buf[1024];
     int len = 0;
     glGetShaderInfoLog(vertexShader, 1024, &len, buf);
-    printf("  Vert shader log %s\n", buf);
+    log("  Vert shader log %s", buf);
   }
 
   auto frag_srcs = {
     "#version 460 core\n",
+    "#extension GL_ARB_gpu_shader_int64 : enable\n",
     "precision highp float;\n",
     "precision highp int;\n",
     "precision highp usampler2D;\n",
@@ -553,7 +576,7 @@ int create_shader(const char* name, const char* src) {
     char buf[1024];
     int len = 0;
     glGetShaderInfoLog(fragmentShader, 1024, &len, buf);
-    printf("  Frag shader log %s\n", buf);
+    log("  Frag shader log %s", buf);
   }
 
   int shaderProgram = glCreateProgram();
@@ -569,7 +592,7 @@ int create_shader(const char* name, const char* src) {
     char buf[1024];
     int len = 0;
     glGetProgramInfoLog(shaderProgram, 1024, &len, buf);
-    printf("  Shader program log %s\n", buf);
+    log("  Shader program log %s", buf);
 
   }
 
@@ -582,8 +605,7 @@ int create_shader(const char* name, const char* src) {
     dump_shader_info(shaderProgram);
   }
 
-  printf("Compiling %s done\n", name);
-  if (verbose) printf("\n");
+  log("Compiling %s done", name);
 
   return shaderProgram;
 }
@@ -600,14 +622,26 @@ int create_compute_shader(const char* name, const char* src) {
   static bool verbose = false;
   assert(!glGetError());
 
-  printf("Compiling %s\n", name);
+  log("Compiling %s", name);
+
+  const char* layout = nullptr;
+
+  if (is_nvidia) {
+    layout = "layout(local_size_x = 32, local_size_y = 1, local_size_z = 1) in;\n";
+  }
+  else {
+    layout = "layout(local_size_x = 64, local_size_y = 1, local_size_z = 1) in;\n";
+  }
 
   auto comp_srcs = {
     "#version 460 core\n",
+    "#extension GL_ARB_gpu_shader_int64 : enable\n",
+    //"#extension GL_EXT_shader_explicit_arithmetic_types : enable\n",
     "precision highp float;\n",
     "precision highp int;\n",
     "precision highp usampler2D;\n",
     "#define _COMPUTE_\n",
+    layout,
     src
   };
 
@@ -622,7 +656,7 @@ int create_compute_shader(const char* name, const char* src) {
     char buf[1024];
     int len = 0;
     glGetShaderInfoLog(compShader, 1024, &len, buf);
-    printf("  Comp shader log %s\n", buf);
+    log("  Comp shader log %s", buf);
   }
 
   int shaderProgram = glCreateProgram();
@@ -637,7 +671,7 @@ int create_compute_shader(const char* name, const char* src) {
     char buf[1024];
     int len = 0;
     glGetProgramInfoLog(shaderProgram, 1024, &len, buf);
-    printf("  Shader program log %s\n", buf);
+    log("  Shader program log %s", buf);
 
   }
 
@@ -649,8 +683,7 @@ int create_compute_shader(const char* name, const char* src) {
     dump_shader_info(shaderProgram);
   }
 
-  printf("Compiling %s done\n", name);
-  if (verbose) printf("\n");
+  log("Compiling %s done", name);
 
   return shaderProgram;
 }

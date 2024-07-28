@@ -204,9 +204,10 @@ void TracePainter::blit(
   uniforms.stride = trace.stride;
   uniforms.miplevel = (-view._zoom.x) / 7;
 
-  update_ubo(trace_ubo, sizeof(uniforms), &uniforms);
 
   bind_shader(trace_prog);
+
+  update_ubo(trace_ubo, sizeof(uniforms), &uniforms);
   bind_ubo(trace_prog, "TraceUniforms", 0, trace_ubo);
 
   bind_ssbo(trace.ssbo, 0, 0, trace.ssbo_len);
