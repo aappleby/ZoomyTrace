@@ -17,8 +17,6 @@ link = hancho.Command(
   libs    = "-lusb-1.0 -lstdc++ -lSDL2 -lm",
 )
 
-imgui_o = [hancho(compile, in_src = f) for f in glob.glob("symlinks/imgui/*.cpp")]
-
 srcs = [
   "src/Bits.cpp",
   "src/Blitter.cpp",
@@ -35,24 +33,9 @@ srcs = [
   "src/TraceMipper.cpp",
 ]
 
-objs = [hancho(compile, in_src = src) for src in srcs]
-
-main = hancho(
-  link,
-  in_objs = [
-    hancho(compile, in_src = "src/main.cpp"),
-    imgui_o,
-    objs
-  ],
-  out_bin = "zoomytrace",
-)
-
-zoomy = hancho(
-  link,
-  in_objs = [
-    hancho(compile, in_src = "src/ZoomyTrace.cpp"),
-    imgui_o,
-    objs
-  ],
-  out_bin = "zoomytest",
-)
+objs    = [hancho(compile, in_src = src) for src in srcs]
+imgui_o = [hancho(compile, in_src = f) for f in glob.glob("symlinks/imgui/*.cpp")]
+main_o  = hancho(compile, in_src = "src/main.cpp")
+main    = hancho(link, in_objs = [main_o, imgui_o, objs], out_bin = "zoomytrace")
+zoomy_o = hancho(compile, in_src = "src/ZoomyTrace.cpp")
+zoomy   = hancho(link, in_objs = [zoomy_o, imgui_o, objs], out_bin = "zoomytest")
