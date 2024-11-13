@@ -1,21 +1,14 @@
 import glob
 
-compile_cpp = hancho.Config(
-    desc    = "Compiling {in_src}",
-    command = "g++ -std=c++20 -g -MMD -I. {opt} {warnings} -c {in_src} -o {out_obj}",
+hancho.base_rules = hancho.repo("{hancho_dir}/base_rules.hancho")
+hancho.metrolib = hancho.repo("{repo_dir}/symlinks/metrolib/build.hancho")
+hancho.imgui = hancho.repo("{repo_dir}/symlinks/third_party/imgui.hancho")
+hancho.glad = hancho.repo("{repo_dir}/symlinks/third_party/glad.hancho")
 
-    opt = "-O0",
-    #opt = "-O3",
-    warnings = "-Wall -Werror -Wno-deprecated-enum-enum-conversion -Wno-unused-variable -Wno-unused-but-set-variable",
-    out_obj  = "{swap_ext(in_src, '.o')}",
-    depfile  = "{swap_ext(in_src, '.d')}",
-)
-
-link_cpp = hancho.Config(
-    desc    = "Linking {out_bin}",
-    command = "gcc -std=c++20 -g -MMD {in_objs} {libs} -o {out_bin} ",
-    libs    = "-lusb-1.0 -lstdc++ -lSDL2 -lm",
-)
+hancho.config.includes = [
+    "{repo_dir}",
+    "{repo_dir}/symlinks",
+]
 
 srcs = [
     "src/Bits.cpp",
@@ -28,14 +21,36 @@ srcs = [
     "src/RingBuffer.cpp",
     "src/ThreadQueue.cpp",
     "src/ViewController.cpp",
-    "symlinks/glad/glad.c",
     "src/TracePainter.cpp",
     "src/TraceMipper.cpp",
 ]
 
-objs    = [hancho(compile_cpp, in_src = src) for src in srcs]
-imgui_o = [hancho(compile_cpp, in_src = f) for f in glob.glob("symlinks/imgui/*.cpp")]
-main_o  = hancho(compile_cpp, in_src = "src/main.cpp")
-main    = hancho(link_cpp, in_objs = [main_o, imgui_o, objs], out_bin = "zoomytrace")
-zoomy_o = hancho(compile_cpp, in_src = "src/ZoomyTrace.cpp")
-zoomy   = hancho(link_cpp, in_objs = [zoomy_o, imgui_o, objs], out_bin = "zoomytest")
+objs = [hancho(hancho.base_rules.compile_cpp, in_src=src) for src in srcs]
+
+main = hancho(
+    hancho.base_rules.cpp_bin,
+    in_srcs="src/main.cpp",
+    in_objs=objs,
+    in_libs=[
+        hancho.metrolib.libappbase,
+        hancho.metrolib.libcore,
+        hancho.imgui.lib,
+        hancho.glad.lib,
+    ],
+    sys_libs=["-lusb-1.0", "-lstdc++", "-lSDL2", "-lm"],
+    out_bin="zoomytrace",
+)
+
+zoomy = hancho(
+    hancho.base_rules.cpp_bin,
+    in_srcs="src/ZoomyTrace.cpp",
+    in_objs=objs,
+    in_libs=[
+        hancho.metrolib.libappbase,
+        hancho.metrolib.libcore,
+        hancho.imgui.lib,
+        hancho.glad.lib,
+    ],
+    sys_libs=["-lusb-1.0", "-lstdc++", "-lSDL2", "-lm"],
+    out_bin="zoomytest",
+)

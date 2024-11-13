@@ -1,5 +1,5 @@
 #include "GLBase.h"
-#include "symlinks/glad/glad.h"
+#include "third_party/glad/glad.h"
 #include <SDL2/SDL.h>
 #include <assert.h>
 #include <map>

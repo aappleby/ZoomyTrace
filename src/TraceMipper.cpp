@@ -1,5 +1,5 @@
 #include "TraceMipper.hpp"
-#include "symlinks/glad/glad.h"
+#include "third_party/glad/glad.h"
 #include "GLBase.h"
 #include <stdio.h>
 #include "log.hpp"

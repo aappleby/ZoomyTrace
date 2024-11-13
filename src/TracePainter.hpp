@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "../symlinks/glm/glm/glm.hpp"
+#include "third_party/glm/glm/glm.hpp"
 #include "Bits.hpp"
 
 using namespace glm;

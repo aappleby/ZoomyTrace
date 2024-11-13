@@ -1,6 +1,6 @@
 #pragma once
 #include <stdint.h>
-#include "symlinks/imgui/imgui.h"
+#include "third_party/imgui/imgui.h"
 #include <SDL2/SDL.h>
 
 //------------------------------------------------------------------------------

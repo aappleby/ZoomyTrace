@@ -1,5 +1,5 @@
 #pragma once
-#include "symlinks/imgui/imgui.h"
+#include "third_party/imgui/imgui.h"
 #include <time.h>
 #include <stdint.h>
 #include <math.h>

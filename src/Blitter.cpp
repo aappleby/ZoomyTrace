@@ -1,6 +1,6 @@
 #include "Blitter.hpp"
 #include "GLBase.h"
-#include "symlinks/glad/glad.h"
+#include "third_party/glad/glad.h"
 #include "ViewController.hpp"
 
 using namespace glm;

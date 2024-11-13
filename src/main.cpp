@@ -5,8 +5,8 @@
 #include "GLBase.h"
 #include "log.hpp"
 
-#include "symlinks/glad/glad.h"
-#include "symlinks/imgui/imgui.h"
+#include "third_party/glad/glad.h"
+#include "third_party/imgui/imgui.h"
 #include <SDL2/SDL.h>
 #include <algorithm>
 

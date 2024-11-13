@@ -1,7 +1,7 @@
 #pragma once
 #include <stdint.h>
 
-#include "symlinks/glm/glm/glm.hpp"
+#include "third_party/glm/glm/glm.hpp"
 
 using namespace glm;
 struct Viewport;

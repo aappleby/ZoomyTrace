@@ -1,8 +1,8 @@
 #include "gui.hpp"
 #include "GLBase.h"
 
-#include "symlinks/glad/glad.h"
-#include "symlinks/imgui/imgui.h"
+#include "third_party/glad/glad.h"
+#include "third_party/imgui/imgui.h"
 #include <SDL2/SDL.h>
 
 double timestamp();
